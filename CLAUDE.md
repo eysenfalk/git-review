@@ -130,14 +130,15 @@ Hooks run in this exact order to ensure enforcement before learning:
 
 **Write/Edit/MultiEdit:**
 1. `.claude/hooks/protect-hooks.sh` (ask — prompts user before hook modifications)
-2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — ensures orchestrator delegates to agents)
+2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — ensures orchestrator delegates to agents; auto-allows subagents)
 3. `.claude/hooks/enforce-plan-files.sh` (blocking — protects plan/ directory)
-4. `.claude/hooks/check-unwrap.sh` (blocking — prevents panic-prone code)
-5. Claude-Flow `pre-edit` hook (non-blocking — learns patterns, advisory only)
+4. `.claude/hooks/check-unwrap.sh` (advisory — warns about `.unwrap()` in library code)
+5. `.claude/hooks/scan-secrets.sh` (advisory — detects potential secrets/credentials in code)
+6. Claude-Flow `pre-edit` hook (non-blocking — learns patterns, advisory only)
 
 **Bash commands:**
 1. `.claude/hooks/protect-hooks.sh` (ask — prompts user before hook modifications)
-2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — catches sed/awk/perl bypasses)
+2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — catches sed/awk/perl bypasses; auto-allows subagents)
 3. `.claude/hooks/protect-main.sh` (blocking — prevents direct main commits)
 4. `.claude/hooks/enforce-branch-naming.sh` (blocking — validates branch format)
 5. `.claude/hooks/enforce-review-gate.sh` (blocking — requires git-review completion)
@@ -151,7 +152,14 @@ Hooks run in this exact order to ensure enforcement before learning:
 1. `.claude/hooks/enforce-serena-usage.sh` (advisory — suggests Serena for code navigation)
 
 **Stop (session end):**
-1. `.claude/hooks/check-claude-flow-memory.sh` (advisory — reminds to save patterns)
+1. `.claude/hooks/enforce-memory.sh` (advisory — reminds to save to claude-mem)
+2. `.claude/hooks/check-claude-flow-memory.sh` (advisory — reminds to save patterns)
+
+**TaskCompleted (task marked done):**
+1. `.claude/hooks/enforce-task-quality.sh` (blocking — runs `cargo test` + `cargo clippy` before task completion; skips non-code tasks)
+
+**TeammateIdle (agent going idle):**
+1. `.claude/hooks/enforce-idle-quality.sh` (blocking — runs `cargo test` + `cargo clippy` before idle; skips if no source changes)
 
 ### Memory Separation
 

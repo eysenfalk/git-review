@@ -29,6 +29,11 @@
           },
           {
             "type": "command",
+            "command": ".claude/hooks/scan-secrets.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
             "command": "[ -n \"$TOOL_INPUT_file_path\" ] && npx @claude-flow/cli@latest hooks pre-edit --file \"$TOOL_INPUT_file_path\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
@@ -200,6 +205,28 @@
             "command": "[ -n \"$NOTIFICATION_MESSAGE\" ] && npx @claude-flow/cli@latest memory store --namespace notifications --key \"notify-$(date +%s)\" --value \"$NOTIFICATION_MESSAGE\" 2>/dev/null || true",
             "timeout": 3000,
             "continueOnError": true
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-task-quality.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-idle-quality.sh",
+            "timeout": 60
           }
         ]
       }

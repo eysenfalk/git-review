@@ -388,6 +388,218 @@ test_hook \
 
 echo ""
 
+# Helper: Test a blocking hook (uses exit codes, not JSON)
+test_blocking_hook() {
+    local test_name="$1"
+    local hook_script="$2"
+    local input_json="$3"
+    local expected_result="$4"  # "allow" or "block"
+
+    local exit_code
+    local stderr
+    stderr=$(echo "$input_json" | bash "$hook_script" 2>&1)
+    exit_code=$?
+
+    if [[ "$expected_result" == "allow" ]]; then
+        if [[ $exit_code -eq 0 ]]; then
+            echo -e "${GREEN}✓ PASS${NC}: $test_name (allowed)"
+            PASS=$((PASS + 1))
+            return 0
+        else
+            echo -e "${RED}✗ FAIL${NC}: $test_name"
+            echo "  Expected: allow (exit 0), Got: exit $exit_code"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+    elif [[ "$expected_result" == "block" ]]; then
+        if [[ $exit_code -eq 2 ]]; then
+            echo -e "${GREEN}✓ PASS${NC}: $test_name (blocked)"
+            PASS=$((PASS + 1))
+            return 0
+        else
+            echo -e "${RED}✗ FAIL${NC}: $test_name"
+            echo "  Expected: block (exit 2), Got: exit $exit_code"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+    fi
+}
+
+# Helper: Create TaskCompleted event JSON
+create_task_completed_input() {
+    local task_subject="$1"
+    local cwd="$2"
+    cat <<EOF
+{
+  "task_id": "test-1",
+  "task_subject": "$task_subject",
+  "cwd": "$cwd",
+  "hook_event_name": "TaskCompleted"
+}
+EOF
+}
+
+# Helper: Create TeammateIdle event JSON
+create_teammate_idle_input() {
+    local cwd="$1"
+    cat <<EOF
+{
+  "teammate_name": "test-agent",
+  "cwd": "$cwd",
+  "hook_event_name": "TeammateIdle"
+}
+EOF
+}
+
+# =========================================
+# Test 6: enforce-task-quality.sh
+# =========================================
+echo "Testing: enforce-task-quality.sh"
+echo "------------------------------------------"
+
+HOOK="$HOOKS_DIR/enforce-task-quality.sh"
+NON_RUST_DIR="$TEST_DIR/non-rust-project"
+mkdir -p "$NON_RUST_DIR"
+
+# Test 6.1: ALLOW - Task in non-Rust project (no Cargo.toml)
+test_blocking_hook \
+    "6.1: Allow task in non-Rust project" \
+    "$HOOK" \
+    "$(create_task_completed_input 'Implement feature' "$NON_RUST_DIR")" \
+    "allow"
+
+# Test 6.2: ALLOW - Documentation task (skipped)
+test_blocking_hook \
+    "6.2: Allow documentation task" \
+    "$HOOK" \
+    "$(create_task_completed_input 'Update docs' "$PROJECT_ROOT")" \
+    "allow"
+
+# Test 6.3: ALLOW - Plan task (skipped)
+test_blocking_hook \
+    "6.3: Allow plan task" \
+    "$HOOK" \
+    "$(create_task_completed_input 'Create plan' "$PROJECT_ROOT")" \
+    "allow"
+
+# Test 6.4: ALLOW - Research task (skipped)
+test_blocking_hook \
+    "6.4: Allow research task" \
+    "$HOOK" \
+    "$(create_task_completed_input 'Research patterns' "$PROJECT_ROOT")" \
+    "allow"
+
+echo ""
+
+# =========================================
+# Test 7: enforce-idle-quality.sh
+# =========================================
+echo "Testing: enforce-idle-quality.sh"
+echo "------------------------------------------"
+
+HOOK="$HOOKS_DIR/enforce-idle-quality.sh"
+
+# Test 7.1: ALLOW - Idle in non-Rust project
+test_blocking_hook \
+    "7.1: Allow idle in non-Rust project" \
+    "$HOOK" \
+    "$(create_teammate_idle_input "$NON_RUST_DIR")" \
+    "allow"
+
+# Test 7.2: ALLOW - Idle with no source changes
+RUST_NO_CHANGES="$TEST_DIR/rust-no-changes"
+mkdir -p "$RUST_NO_CHANGES"
+echo '[package]' > "$RUST_NO_CHANGES/Cargo.toml"
+(cd "$RUST_NO_CHANGES" && git init -q && git config user.email "test@test.com" && git config user.name "Test" && git add . && git commit -q -m "init")
+
+test_blocking_hook \
+    "7.2: Allow idle with no source changes" \
+    "$HOOK" \
+    "$(create_teammate_idle_input "$RUST_NO_CHANGES")" \
+    "allow"
+
+echo ""
+
+# =========================================
+# Test 8: scan-secrets.sh
+# =========================================
+echo "Testing: scan-secrets.sh"
+echo "------------------------------------------"
+
+HOOK="$HOOKS_DIR/scan-secrets.sh"
+
+# Test 8.1: ADVISORY - AWS key detected
+test_hook \
+    "8.1: Advisory on AWS key detection" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/config.rs","content":"let key = \"AKIAIOSFODNN7EXAMPLE1\";"}')" \
+    "advisory"
+
+# Test 8.2: ADVISORY - Password assignment detected
+test_hook \
+    "8.2: Advisory on password assignment" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/config.rs","content":"password = \"super_secret_password_123\""}')" \
+    "advisory"
+
+# Test 8.3: ADVISORY - Private key header detected
+test_hook \
+    "8.3: Advisory on private key header" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/config.rs","content":"-----BEGIN RSA PRIVATE KEY-----"}')" \
+    "advisory"
+
+# Test 8.4: ADVISORY - Database connection string detected
+test_hook \
+    "8.4: Advisory on database connection string" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/db.rs","content":"let url = \"postgres://admin:secret@localhost/db\";"}')" \
+    "advisory"
+
+# Test 8.5: ALLOW - Normal code (no secrets)
+test_hook \
+    "8.5: Allow normal code (no secrets)" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/main.rs","content":"fn main() { println!(\"hello\"); }"}')" \
+    "allow"
+
+# Test 8.6: ALLOW - Test file with password (skipped)
+test_hook \
+    "8.6: Allow test file with password (skipped)" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"tests/auth_test.rs","content":"password = \"test_password_123\""}')" \
+    "allow"
+
+# Test 8.7: ALLOW - Markdown file (skipped)
+test_hook \
+    "8.7: Allow markdown file (skipped)" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"docs/setup.md","content":"password = \"example_pass\""}')" \
+    "allow"
+
+# Test 8.8: ADVISORY - Token assignment via Edit tool
+test_hook \
+    "8.8: Advisory on token assignment via Edit" \
+    "$HOOK" \
+    "$(create_tool_input 'Edit' '{"file_path":"src/auth.rs","old_string":"old","new_string":"token = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abcdef\""}')" \
+    "advisory"
+
+# Test 8.9: ALLOW - Image file (skipped)
+test_hook \
+    "8.9: Allow image file (skipped)" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"assets/logo.png","content":"binary_data"}')" \
+    "allow"
+
+# Test 8.10: ALLOW - Variable named password (no assignment)
+test_hook \
+    "8.10: Allow bare password variable name" \
+    "$HOOK" \
+    "$(create_tool_input 'Write' '{"file_path":"src/auth.rs","content":"fn validate_password(input: &str) -> bool { true }"}')" \
+    "allow"
+
+echo ""
+
 # =========================================
 # Summary
 # =========================================

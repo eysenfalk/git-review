@@ -12,6 +12,12 @@ fi
 # Read JSON input from stdin
 INPUT=$(cat)
 
+# If running as a subagent, allow — agents ARE the delegation
+TRANSCRIPT_PATH_CHECK=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+if [[ "$TRANSCRIPT_PATH_CHECK" =~ /subagents/ ]]; then
+  exit 0
+fi
+
 # Get tool name
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
