@@ -36,8 +36,9 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
   # Check for various ways to write to hooks directory
-  if [[ "$COMMAND" =~ (echo|cat|tee|sed|awk|perl|python).*(>|>>).*.claude/hooks/ ]] || \
-     [[ "$COMMAND" =~ (mv|cp).*.claude/hooks/ ]]; then
+  if [[ "$COMMAND" =~ (sed|awk|perl).*\.claude/hooks/ ]] || \
+     [[ "$COMMAND" =~ (echo|cat|tee|python).*(>|>>).*.claude/hooks/ ]] || \
+     [[ "$COMMAND" =~ (mv|cp|rm|chmod|ln).*.claude/hooks/ ]]; then
     echo "{
   \"hookSpecificOutput\": {
     \"hookEventName\": \"PreToolUse\",
