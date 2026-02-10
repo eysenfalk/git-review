@@ -1,0 +1,86 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Write|Edit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-delegation.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-plan-files.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-unwrap.sh",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-main.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-branch-naming.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-review-gate.sh",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/workflow-reminder.sh",
+            "timeout": 1000,
+            "continueOnError": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"ok\": true}'",
+            "timeout": 1000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-memory.sh",
+            "timeout": 3000,
+            "continueOnError": true
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [],
+    "deny": []
+  },
+  "attribution": {
+    "commit": "Co-Authored-By: YOUR_NAME <YOUR_EMAIL>",
+    "pr": "🤖 Generated with Claude Code"
+  }
+}
