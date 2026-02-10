@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -34,6 +34,8 @@ pub struct App {
     filter: FilterMode,
     should_quit: bool,
     show_help: bool,
+    scroll_offset: u16,
+    highlighter: crate::highlight::Highlighter,
 }
 
 impl App {
@@ -48,6 +50,8 @@ impl App {
             filter: FilterMode::All,
             should_quit: false,
             show_help: false,
+            scroll_offset: 0,
+            highlighter: crate::highlight::Highlighter::new(),
         }
     }
 
@@ -115,6 +119,12 @@ impl App {
             KeyCode::Char(' ') => {
                 self.toggle_reviewed()?;
             }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_offset = self.scroll_offset.saturating_add(10);
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(10);
+            }
             KeyCode::Char('u') => {
                 self.filter = FilterMode::Unreviewed;
                 self.reset_selection();
@@ -126,6 +136,12 @@ impl App {
             KeyCode::Char('a') => {
                 self.filter = FilterMode::All;
                 self.reset_selection();
+            }
+            KeyCode::PageDown => {
+                self.scroll_offset = self.scroll_offset.saturating_add(20);
+            }
+            KeyCode::PageUp => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(20);
             }
             _ => {}
         }
@@ -141,14 +157,17 @@ impl App {
         if let Some(current_pos) = visible.iter().position(|&i| i == self.selected_hunk) {
             if current_pos + 1 < visible.len() {
                 self.selected_hunk = visible[current_pos + 1];
+                self.scroll_offset = 0;
             }
         } else if !visible.is_empty() {
             self.selected_hunk = visible[0];
+            self.scroll_offset = 0;
         }
     }
 
     /// Navigate to the previous hunk.
     fn navigate_hunk_up(&mut self) {
+        self.scroll_offset = 0;
         let visible = self.visible_hunks();
         if visible.is_empty() {
             return;
@@ -194,6 +213,7 @@ impl App {
     fn reset_hunk_selection(&mut self) {
         let visible = self.visible_hunks();
         self.selected_hunk = visible.first().copied().unwrap_or(0);
+        self.scroll_offset = 0;
     }
 
     /// Reset selection after filter change.
@@ -337,15 +357,11 @@ impl App {
         )));
 
         // Add hunk content with syntax highlighting
+        let file_ext = file.path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let mut fh = self.highlighter.for_file(file_ext);
         for line in hunk.content.lines() {
-            let styled_line = if line.starts_with('+') {
-                Line::from(Span::styled(line, Style::default().fg(Color::Green)))
-            } else if line.starts_with('-') {
-                Line::from(Span::styled(line, Style::default().fg(Color::Red)))
-            } else {
-                Line::from(line)
-            };
-            lines.push(styled_line);
+            let spans = fh.highlight_diff_line(line);
+            lines.push(Line::from(spans));
         }
 
         let status_str = match hunk.status {
@@ -361,7 +377,8 @@ impl App {
                     .borders(Borders::ALL)
                     .title(format!("Hunk Detail (Space to toggle){}", status_str)),
             )
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_offset, 0));
 
         frame.render_widget(paragraph, area);
     }
@@ -412,6 +429,8 @@ impl App {
             "  k / Up        - Previous hunk",
             "  Tab           - Next file",
             "  Shift+Tab     - Previous file",
+            "  Ctrl+d/PgDn  - Scroll down",
+            "  Ctrl+u/PgUp  - Scroll up",
             "",
             "Actions:",
             "  Space         - Toggle reviewed status",
