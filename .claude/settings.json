@@ -12,6 +12,16 @@
             "command": "[ -n \"$TOOL_INPUT_file_path\" ] && npx @claude-flow/cli@latest hooks pre-edit --file \"$TOOL_INPUT_file_path\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-plan-files.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-unwrap.sh",
+            "timeout": 3000
           }
         ]
       },
@@ -23,6 +33,21 @@
             "command": "[ -n \"$TOOL_INPUT_command\" ] && npx @claude-flow/cli@latest hooks pre-command --command \"$TOOL_INPUT_command\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-main.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-branch-naming.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-review-gate.sh",
+            "timeout": 3000
           }
         ]
       },
@@ -81,6 +106,12 @@
             "command": "[ -n \"$PROMPT\" ] && npx @claude-flow/cli@latest hooks route --task \"$PROMPT\" || true",
             "timeout": 5000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/workflow-reminder.sh",
+            "timeout": 1000,
+            "continueOnError": true
           }
         ]
       }
@@ -110,6 +141,12 @@
             "type": "command",
             "command": "echo '{\"ok\": true}'",
             "timeout": 1000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-memory.sh",
+            "timeout": 3000,
+            "continueOnError": true
           }
         ]
       }
