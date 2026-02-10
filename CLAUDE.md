@@ -176,12 +176,42 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 
 ### Rules
 
+- **ALWAYS use TeamCreate + `team_name` when spawning agents** — agents MUST run as visible tmux panes, never as invisible sub-processes. No exceptions.
 - Always shut down all teammates before calling `TeamDelete`
 - Use `haiku` model for lightweight/test teammates to save tokens
 - Each teammate gets its own context window; they do NOT inherit conversation history
 - Provide full task context in the spawn prompt
 - Avoid assigning multiple teammates to the same file to prevent conflicts
 - Use `TaskCreate` / `TaskUpdate` for coordinating work across teammates
+
+## Agent Routing
+
+### Agent Pipeline (ordered workflow)
+
+1. `requirements-interviewer` — Gather and clarify requirements from the user
+2. `explorer` — Research libraries, APIs, prior art, technical approaches
+3. `architect` — Design module boundaries, data flow, type definitions
+4. `planner` — Write step-by-step implementation plan (ONLY agent that writes local plan files)
+5. `red-teamer` — Critique the plan, find bugs/edge cases/risks before implementation
+6. `coder` (Sonnet) — Standard implementation with TDD
+7. `senior-coder` (Opus) — Complex/cross-cutting/performance-critical implementation
+8. `reviewer` — Code review after implementation
+9. `documentation` — Update README, doc comments, guides
+10. `explainer` — Explain code at different expertise levels (junior → staff/architect)
+11. `optimizer` — Meta-workflow audit (run after every major task completion)
+
+### When to Use senior-coder vs coder
+
+- **coder (Sonnet):** Single-module changes, straightforward features, bug fixes with clear cause, test writing
+- **senior-coder (Opus):** Cross-module refactors, performance-critical paths, subtle/intermittent bugs, architecture-sensitive changes, tasks a coder failed at
+
+### Orchestrator Rules
+
+- The orchestrator (main session) MUST NOT write implementation code directly
+- The orchestrator coordinates: creates teams, spawns agents, assigns tasks, reviews results
+- ALL code changes go through coder or senior-coder agents
+- The orchestrator MAY edit non-code files: CLAUDE.md, agent specs, hook scripts, plans
+- The orchestrator MUST create a team (TeamCreate) before spawning any agents — agents must be visible in tmux panes
 
 ## Anti-Patterns
 
