@@ -5,10 +5,10 @@ Linear: ENG-2 | Branch: eysenfalk/eng-2-build-tui-tool-for-hunk-level-git-diff-r
 ## Status
 
 - [x] Task 1: Project setup (CLAUDE.md, Cargo.toml, types, stubs) — DONE
-- [ ] Task 2: Parser + State layer
-- [ ] Task 3: TUI interface
-- [ ] Task 4: Gate + CLI wiring
-- [ ] Task 5: Integration verification (final)
+- [x] Task 2: Parser + State layer — DONE (19 tests)
+- [x] Task 3: TUI interface — DONE (542 LOC, ratatui)
+- [x] Task 4: Gate + CLI wiring — DONE (7 integration tests)
+- [x] Task 5: Integration verification — DONE (26 tests, clippy clean, fmt clean)
 
 ## Shared Types (src/lib.rs) — already created
 
