@@ -40,6 +40,21 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Resolve: `ToolSearch("+context7 resolve")` → `mcp__plugin_context7_context7__resolve-library-id`
 - Query: `mcp__plugin_context7_context7__query-docs`
 
+### Serena (semantic code intelligence)
+- Use Serena when you need to understand code structure
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+- Performance metrics: `ToolSearch("+claude-flow performance_metrics")` → `mcp__claude-flow__performance_metrics`
+- Bottleneck analysis: `ToolSearch("+claude-flow performance_bottleneck")` → `mcp__claude-flow__performance_bottleneck`
+- Performance report: `ToolSearch("+claude-flow performance_report")` → `mcp__claude-flow__performance_report`
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = track improvement tickets. Create issues for actionable workflow changes.

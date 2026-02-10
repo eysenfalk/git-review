@@ -40,6 +40,18 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Resolve: `ToolSearch("+context7 resolve")` → `mcp__plugin_context7_context7__resolve-library-id`
 - Query: `mcp__plugin_context7_context7__query-docs`
 
+### Serena (semantic code intelligence)
+- Use Serena when you need to understand code structure
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = source of truth. Read requirements FROM Linear. Write final spec BACK to Linear (update ticket description or create sub-issues). NEVER write requirements to local files.

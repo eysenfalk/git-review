@@ -84,6 +84,7 @@ Use London School (mock-first) for integration boundaries. Use real implementati
 - **context7**: Query Rust/ratatui/rusqlite docs BEFORE using unfamiliar APIs
 - **claude-mem**: Cross-session memory only. Save decisions/patterns (brief). NEVER duplicate Linear content.
 - **Linear**: Source of truth for requirements, status, and acceptance criteria. ALL tickets tracked there.
+- **Serena**: Semantic code intelligence via LSP. Use `find_symbol` and `get_symbols_overview` INSTEAD of reading full source files. Use `find_referencing_symbols` for impact analysis. Use `replace_symbol_body` for precise edits. Fall back to Read/Edit for non-code files.
 
 ## Hybrid Claude-Flow Integration (ENFORCED)
 
@@ -114,6 +115,15 @@ This project uses a **hybrid architecture** combining Claude Code's native agent
 - **Task Management:** Claude-Flow task orchestration supplements native TaskCreate/TaskUpdate
 - **Production Features:** DDD domain tracking, ADR generation, security scanning (CVE, threat modeling)
 
+#### Serena MCP (Semantic Code Intelligence)
+
+- **Symbol Navigation:** `find_symbol`, `get_symbols_overview` for token-efficient code reading (50-75% savings vs reading full files)
+- **Impact Analysis:** `find_referencing_symbols` to find all callers/users of any symbol
+- **Precise Edits:** `replace_symbol_body`, `insert_before/after_symbol` for symbol-level code modifications
+- **Rename Refactoring:** `rename_symbol` with automatic reference updates across codebase
+- **Pattern Search:** `search_for_pattern` for regex search across project files
+- **Project Memory:** `read_memory`, `write_memory` for project-specific code structure and conventions
+
 ### Hook Execution Order (CRITICAL)
 
 Hooks run in this exact order to ensure enforcement before learning:
@@ -134,8 +144,18 @@ Hooks run in this exact order to ensure enforcement before learning:
 
 - **claude-mem:** User preferences, architectural decisions, debugging insights, cross-session learnings (human-driven)
 - **Claude-Flow memory:** Agent coordination patterns, code optimization history, model performance data (agent-driven)
+- **Serena memory:** Project code structure, conventions, build commands (code-driven, auto-discovered via onboarding)
 - **Linear:** Ticket requirements, acceptance criteria, status tracking (project management)
 - **No overlap:** Each memory system serves a distinct purpose; never duplicate content
+
+### Tool Routing (Serena vs Native Tools)
+
+- **Reading code structure**: Use Serena `get_symbols_overview` → only read bodies you need (saves 50-75% tokens)
+- **Finding definitions**: Use Serena `find_symbol` instead of Grep for symbol definitions
+- **Finding callers**: Use Serena `find_referencing_symbols` instead of Grep for who-calls-what
+- **Replacing functions**: Use Serena `replace_symbol_body` for entire function replacement (vs Edit for line-level)
+- **Non-code files**: Use Read/Edit/Grep (Serena only works with LSP-supported languages)
+- **Config/markdown/TOML**: Use Read/Edit (Serena has limited support for non-code)
 
 ### Model Routing
 
@@ -180,6 +200,7 @@ All 10 Claude-Flow daemon workers run continuously:
 - **Production-ready:** DDD, ADR, security features support large-scale professional work
 - **Clear boundaries:** Each system owns specific responsibilities with no overlap
 - **Observable behavior:** tmux panes show agent activity; background workers run invisibly
+- **Token efficiency:** Serena's LSP-powered navigation reads only what's needed (50-75% savings over full-file reads)
 
 ## Data Workflow (ENFORCED)
 

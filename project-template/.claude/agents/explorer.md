@@ -37,6 +37,23 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Check the Linear ticket for requirements that inform research
 - Search: `ToolSearch("+linear get issue")` → `mcp__plugin_linear_linear__get_issue`
 
+### Serena (semantic code intelligence) — USE FOR CODE NAVIGATION
+- **ALWAYS** use Serena symbol tools instead of reading entire source files
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+- Find callers: `ToolSearch("+serena find_referencing")` → `mcp__serena__find_referencing_symbols`
+- Pattern search: `ToolSearch("+serena search")` → `mcp__serena__search_for_pattern`
+- Use `get_symbols_overview` to understand file structure BEFORE reading full bodies
+- Use `find_referencing_symbols` for impact analysis (who calls this function?)
+- Fall back to Read/Grep for non-code files
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = source of truth. Read ticket for research context. Post findings as a Linear comment on the ticket. NEVER write research to local files.

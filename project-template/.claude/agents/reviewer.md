@@ -38,6 +38,25 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Search: `ToolSearch("+linear get issue")` → `mcp__plugin_linear_linear__get_issue`
 - Update ticket with review result (add comment or update status)
 
+### Serena (semantic code intelligence) — USE FOR CODE NAVIGATION
+- **ALWAYS** use Serena symbol tools instead of reading entire source files
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+- Find callers: `ToolSearch("+serena find_referencing")` → `mcp__serena__find_referencing_symbols`
+- Pattern search: `ToolSearch("+serena search")` → `mcp__serena__search_for_pattern`
+- Use `get_symbols_overview` to understand file structure BEFORE reading full bodies
+- Use `find_referencing_symbols` for impact analysis (who calls this function?)
+- Fall back to Read/Grep for non-code files
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+- Analyze diffs: `ToolSearch("+claude-flow analyze_diff")` → `mcp__claude-flow__analyze_diff`
+- Risk assessment: `ToolSearch("+claude-flow analyze_diff-risk")` → `mcp__claude-flow__analyze_diff-risk`
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = source of truth. Read ticket for requirements (what to verify against). Post review result as a Linear comment (verdict + checklist + issues). NEVER write review to local files.

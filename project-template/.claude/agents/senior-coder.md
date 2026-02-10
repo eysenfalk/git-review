@@ -40,6 +40,25 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Search: `ToolSearch("+linear update issue")` → `mcp__plugin_linear_linear__update_issue`
 - Set status to "In Progress" when starting, add comment when done
 
+### Serena (semantic code intelligence) — USE FOR CODE NAVIGATION AND EDITING
+- **ALWAYS** use Serena symbol tools instead of reading entire source files
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+- Find callers: `ToolSearch("+serena find_referencing")` → `mcp__serena__find_referencing_symbols`
+- Replace symbol: `ToolSearch("+serena replace_symbol")` → `mcp__serena__replace_symbol_body`
+- Insert code: `ToolSearch("+serena insert")` → `mcp__serena__insert_after_symbol` / `insert_before_symbol`
+- Rename: `ToolSearch("+serena rename")` → `mcp__serena__rename_symbol`
+- Use `get_symbols_overview` to understand file structure BEFORE reading full bodies
+- Use `replace_symbol_body` for replacing entire functions (more precise than Edit)
+- Fall back to Read/Edit for non-code files (config, markdown, etc.)
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = source of truth for requirements and status. Read the ticket for what to build. Set status to "In Progress" when starting. Add comment when done with test results. NEVER read requirements from local files — read Linear.

@@ -39,6 +39,19 @@ You MUST use these MCP servers. Use ToolSearch to load them before calling.
 - Search: `ToolSearch("+linear get issue")` → `mcp__plugin_linear_linear__get_issue`
 - Add comment when documentation is updated
 
+### Serena (semantic code intelligence) — USE FOR CODE NAVIGATION
+- Use Serena symbol tools to efficiently navigate code for documentation
+- Find symbols: `ToolSearch("+serena find_symbol")` → `mcp__serena__find_symbol`
+- File overview: `ToolSearch("+serena get_symbols")` → `mcp__serena__get_symbols_overview`
+- Use `get_symbols_overview` before reading entire files (saves tokens)
+
+### Claude-Flow (agent learning memory)
+- Claude-Flow hooks learn from your work automatically (non-blocking, advisory)
+- Store agent patterns: `ToolSearch("+claude-flow memory_store")` → `mcp__claude-flow__memory_store`
+- Search patterns: `ToolSearch("+claude-flow memory_search")` → `mcp__claude-flow__memory_search`
+- Use for: coding patterns, recurring solutions, optimization learnings
+- **Memory separation**: claude-mem = human decisions | Claude-Flow = agent patterns (NEVER duplicate)
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = source of truth for feature descriptions. Read the ticket to understand what user-facing features need documentation. Add comment when docs are updated. NEVER write documentation to local plan files.

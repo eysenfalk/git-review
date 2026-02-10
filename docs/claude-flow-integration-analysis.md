@@ -405,11 +405,19 @@ Prompt injection detection, PII scanning. Only useful if building user-facing ag
 
 ---
 
-## Serena MCP Server — Additional Integration
+## Serena MCP Server — Implemented Integration
 
 ### What Serena Is
 
 Serena is a free, open-source (MIT, 19k+ stars) coding agent toolkit that provides **semantic code intelligence via LSP** (Language Server Protocol). It gives LLM agents IDE-like abilities: "Go to Definition", "Find All References", symbol-level editing — across 30+ languages.
+
+### Implementation Status: OPERATIONAL
+
+**Completed:**
+- All 11 agent specs in `~/.claude/agents/` now include Serena MCP sections
+- Project configuration (`project.yml`) configured with rust+bash+toml language support
+- Onboarding complete with 4 project memories stored in Serena
+- Tool routing guidelines documented in CLAUDE.md
 
 ### Why We Need It
 
