@@ -9,7 +9,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/enforce-delegation.sh",
+            "command": ".claude/hooks/protect-hooks.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-orchestrator-delegation-v2.sh",
             "timeout": 3000
           },
           {
@@ -33,6 +38,16 @@
       {
         "matcher": "^Bash$",
         "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-hooks.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-orchestrator-delegation-v2.sh",
+            "timeout": 3000
+          },
           {
             "type": "command",
             "command": ".claude/hooks/protect-main.sh",
@@ -61,9 +76,24 @@
         "hooks": [
           {
             "type": "command",
+            "command": ".claude/hooks/enforce-visible-agents.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
             "command": "[ -n \"$TOOL_INPUT_prompt\" ] && npx @claude-flow/cli@latest hooks pre-task --task-id \"task-$(date +%s)\" --description \"$TOOL_INPUT_prompt\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
+          }
+        ]
+      },
+      {
+        "matcher": "^(Read|Grep)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/enforce-serena-usage.sh",
+            "timeout": 3000
           }
         ]
       }
@@ -150,6 +180,12 @@
           {
             "type": "command",
             "command": ".claude/hooks/enforce-memory.sh",
+            "timeout": 3000,
+            "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-claude-flow-memory.sh",
             "timeout": 3000,
             "continueOnError": true
           }

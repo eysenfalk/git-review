@@ -4,7 +4,7 @@ description: >
   Adversarial reviewer that critiques plans and designs before implementation.
   Finds bugs, edge cases, performance risks, and over-engineering.
   Can BLOCK implementation if critical issues are found.
-model: sonnet
+model: opus
 tools:
   - Read
   - Glob

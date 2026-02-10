@@ -4,7 +4,7 @@ description: >
   Code reviewer that checks implementation against plan, project rules, and
   quality standards. Runs tests, checks for anti-patterns, and rates the code.
   Can block merge with FAIL rating.
-model: sonnet
+model: opus
 tools:
   - Read
   - Glob

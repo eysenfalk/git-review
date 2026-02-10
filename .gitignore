@@ -24,3 +24,9 @@ target
 # Added by cargo
 
 /target
+
+# MCP server generated configs (local only)
+.claude-flow/
+.claude/agents/
+.firecrawl/
+.serena/

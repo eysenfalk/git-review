@@ -4,7 +4,7 @@ description: >
   Implementation planner that turns research and architecture into concrete,
   step-by-step plans with exact file paths, function signatures, and test names.
   Plans are unambiguous enough for a coder agent to execute without questions.
-model: sonnet
+model: opus
 tools:
   - Read
   - Glob

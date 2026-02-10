@@ -201,11 +201,11 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 1. `requirements-interviewer` — Gather and clarify requirements from the user
 2. `explorer` — Research libraries, APIs, prior art, technical approaches
 3. `architect` — Design module boundaries, data flow, type definitions
-4. `planner` — Write step-by-step implementation plan (ONLY agent that writes local plan files)
-5. `red-teamer` — Critique the plan, find bugs/edge cases/risks before implementation
+4. `planner` (Opus) — Write step-by-step implementation plan (ONLY agent that writes local plan files)
+5. `red-teamer` (Opus) — Critique the plan, find bugs/edge cases/risks before implementation
 6. `coder` (Sonnet) — Standard implementation with TDD
 7. `senior-coder` (Opus) — Complex/cross-cutting/performance-critical implementation
-8. `reviewer` — Code review after implementation
+8. `reviewer` (Opus) — Code review after implementation
 9. `documentation` — Update README, doc comments, guides
 10. `explainer` — Explain code at different expertise levels (junior → staff/architect)
 11. `optimizer` — Meta-workflow audit (run after every major task completion)
