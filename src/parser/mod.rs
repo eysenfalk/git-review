@@ -77,6 +77,9 @@ pub fn parse_diff(input: &str) -> Vec<DiffFile> {
                 if current.starts_with("@@ ") {
                     if let Some(hunk) = parse_hunk(&lines, &mut i) {
                         hunks.push(hunk);
+                    } else {
+                        // parse_hunk failed without advancing i — skip this line
+                        i += 1;
                     }
                 } else {
                     i += 1;
@@ -101,8 +104,13 @@ pub fn parse_diff(input: &str) -> Vec<DiffFile> {
 fn parse_hunk(lines: &[&str], i: &mut usize) -> Option<DiffHunk> {
     let line = lines[*i];
 
-    // Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
-    let header = line.strip_prefix("@@ ")?.strip_suffix(" @@")?;
+    // Parse hunk header: @@ -old_start,old_count +new_start,new_count @@ [context]
+    let header = line.strip_prefix("@@ ")?;
+    // Find the closing @@ — everything after it is optional context
+    let header = match header.find(" @@") {
+        Some(pos) => &header[..pos],
+        None => return None,
+    };
     let parts: Vec<&str> = header.split(' ').collect();
     if parts.len() < 2 {
         return None;

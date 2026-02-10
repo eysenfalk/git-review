@@ -13,9 +13,9 @@ fn main() -> Result<()> {
 
     match args.command {
         None => {
-            // Default: Review with HEAD (staged changes)
-            let diff_range = "HEAD".to_string();
-            handle_review(&diff_range, false)?;
+            // Top-level usage: git-review [range] [--status]
+            let diff_range = args.diff_range.unwrap_or_else(|| "HEAD".to_string());
+            handle_review(&diff_range, args.status)?;
         }
         Some(Commands::Review(review_args)) => {
             let diff_range = review_args.diff_range.unwrap_or_else(|| "HEAD".to_string());

@@ -3,6 +3,13 @@ use clap::{Args, Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "git-review", about = "Per-hunk review tracking for git diffs")]
 pub struct Cli {
+    /// Diff range to review (e.g., "main..HEAD"). Shorthand for `review <range>`.
+    pub diff_range: Option<String>,
+
+    /// Show progress summary instead of launching TUI.
+    #[arg(short, long)]
+    pub status: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

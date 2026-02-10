@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod gate;
+pub mod highlight;
 pub mod parser;
 pub mod state;
 pub mod tui;
