@@ -129,16 +129,29 @@ This project uses a **hybrid architecture** combining Claude Code's native agent
 Hooks run in this exact order to ensure enforcement before learning:
 
 **Write/Edit/MultiEdit:**
-1. `.claude/hooks/enforce-delegation.sh` (blocking — ensures orchestrator doesn't write code)
-2. `.claude/hooks/enforce-plan-files.sh` (blocking — protects plan/ directory)
-3. `.claude/hooks/check-unwrap.sh` (blocking — prevents panic-prone code)
-4. Claude-Flow `pre-edit` hook (non-blocking — learns patterns, advisory only)
+1. `.claude/hooks/protect-hooks.sh` (ask — prompts user before hook modifications)
+2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — ensures orchestrator delegates to agents)
+3. `.claude/hooks/enforce-plan-files.sh` (blocking — protects plan/ directory)
+4. `.claude/hooks/check-unwrap.sh` (blocking — prevents panic-prone code)
+5. Claude-Flow `pre-edit` hook (non-blocking — learns patterns, advisory only)
 
 **Bash commands:**
-1. `.claude/hooks/protect-main.sh` (blocking — prevents direct main commits)
-2. `.claude/hooks/enforce-branch-naming.sh` (blocking — validates branch format)
-3. `.claude/hooks/enforce-review-gate.sh` (blocking — requires git-review completion)
-4. Claude-Flow `pre-command` hook (non-blocking — learns patterns, advisory only)
+1. `.claude/hooks/protect-hooks.sh` (ask — prompts user before hook modifications)
+2. `.claude/hooks/enforce-orchestrator-delegation-v2.sh` (blocking — catches sed/awk/perl bypasses)
+3. `.claude/hooks/protect-main.sh` (blocking — prevents direct main commits)
+4. `.claude/hooks/enforce-branch-naming.sh` (blocking — validates branch format)
+5. `.claude/hooks/enforce-review-gate.sh` (blocking — requires git-review completion)
+6. Claude-Flow `pre-command` hook (non-blocking — learns patterns, advisory only)
+
+**Task (agent spawning):**
+1. `.claude/hooks/enforce-visible-agents.sh` (blocking — requires team_name for agent visibility)
+2. Claude-Flow task hook (non-blocking — advisory only)
+
+**Read/Grep/Bash (source files):**
+1. `.claude/hooks/enforce-serena-usage.sh` (advisory — suggests Serena for code navigation)
+
+**Stop (session end):**
+1. `.claude/hooks/check-claude-flow-memory.sh` (advisory — reminds to save patterns)
 
 ### Memory Separation
 
