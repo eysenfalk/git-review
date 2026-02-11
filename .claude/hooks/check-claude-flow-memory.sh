@@ -26,10 +26,7 @@ if grep -q '"file_path".*\(src/\|tests/\)' "$TRANSCRIPT_PATH"; then
   if ! grep -q 'mcp__claude-flow__memory_store' "$TRANSCRIPT_PATH"; then
     # Suggest saving patterns
     echo "{
-  \"hookSpecificOutput\": {
-    \"hookEventName\": \"Stop\",
-    \"additionalContext\": \"💡 Code was modified but no patterns saved to Claude-Flow memory. Consider: mcp__claude-flow__memory_store for agent patterns.\"
-  }
+  \"stopReason\": \"💡 Code was modified but no patterns saved to Claude-Flow memory. Consider: mcp__claude-flow__memory_store for agent patterns.\"
 }" >&1
     exit 0
   fi
