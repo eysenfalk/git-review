@@ -33,6 +33,10 @@ pub enum Commands {
     },
     /// Reset review state for the current diff.
     Reset(ResetArgs),
+    /// Approve all hunks (or specific file) without individual review.
+    Approve(ApproveArgs),
+    /// Watch branches for review status changes.
+    Watch(WatchArgs),
 }
 
 #[derive(Args, Debug)]
@@ -68,6 +72,22 @@ pub enum GateAction {
     Enable,
     /// Remove the pre-commit hook.
     Disable,
+}
+
+#[derive(Args, Debug)]
+pub struct ApproveArgs {
+    /// Diff range to approve (e.g., "main..HEAD").
+    pub diff_range: String,
+    /// Approve only hunks in this file path.
+    #[arg(short, long)]
+    pub file: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct WatchArgs {
+    /// Refresh interval in seconds (default: 5).
+    #[arg(short, long, default_value = "5")]
+    pub interval: u64,
 }
 
 /// Parse CLI arguments.

@@ -47,6 +47,12 @@ fn main() -> Result<()> {
             let diff_range = reset_args.diff_range.unwrap_or_else(|| "HEAD".to_string());
             handle_reset(&diff_range)?;
         }
+        Some(Commands::Approve(args)) => {
+            handle_approve(&args.diff_range, args.file.as_deref())?;
+        }
+        Some(Commands::Watch(args)) => {
+            handle_watch(args.interval)?;
+        }
     }
 
     Ok(())
@@ -285,4 +291,87 @@ fn validate_git_ref(ref_str: &str) -> Result<()> {
 /// Converts "main..HEAD" to "main..HEAD" (as-is) and "HEAD" to "HEAD".
 fn normalize_diff_range(range: &str) -> String {
     range.to_string()
+}
+
+/// Handle approve command - bulk approve hunks.
+fn handle_approve(diff_range: &str, file_filter: Option<&str>) -> Result<()> {
+    let repo_root = find_repo_root()?;
+    let base_ref = normalize_diff_range(diff_range);
+    let diff_output = get_git_diff(diff_range)?;
+    let files = parse_diff(&diff_output);
+
+    if files.is_empty() {
+        println!("No changes to approve");
+        return Ok(());
+    }
+
+    let db_path = repo_root.join(".git/review-state");
+    std::fs::create_dir_all(&db_path)?;
+    let db_file = db_path.join("review.db");
+    let mut db = ReviewDb::open(&db_file)?;
+    db.sync_with_diff(&base_ref, &files)?;
+
+    let count = if let Some(file_path) = file_filter {
+        db.approve_file(&base_ref, file_path)?
+    } else {
+        db.approve_all(&base_ref)?
+    };
+
+    println!("✓ Approved {} hunks for {}", count, diff_range);
+    Ok(())
+}
+
+/// Handle watch command - continuously monitor branches.
+fn handle_watch(interval: u64) -> Result<()> {
+    let repo_root = find_repo_root()?;
+    println!("Watching for branches needing review (Ctrl+C to stop)...\n");
+
+    loop {
+        // Get list of local branches
+        let output = Command::new("git")
+            .args(["branch", "--format", "%(refname:short)"])
+            .output()
+            .context("Failed to list branches")?;
+        let branches = String::from_utf8_lossy(&output.stdout);
+
+        // Check each non-main branch
+        for branch in branches.lines() {
+            let branch = branch.trim();
+            if branch == "main" || branch == "master" || branch.is_empty() {
+                continue;
+            }
+            let diff_range = format!("main..{}", branch);
+            if let Ok(diff_output) = get_git_diff(&diff_range) {
+                let files = parse_diff(&diff_output);
+                if files.is_empty() {
+                    continue;
+                }
+
+                let db_path = repo_root.join(".git/review-state");
+                std::fs::create_dir_all(&db_path).ok();
+                let db_file = db_path.join("review.db");
+                if let Ok(mut db) = ReviewDb::open(&db_file) {
+                    db.sync_with_diff(&diff_range, &files).ok();
+                    if let Ok(progress) = db.progress(&diff_range) {
+                        let pct = if progress.total_hunks > 0 {
+                            (progress.reviewed as f64 / progress.total_hunks as f64) * 100.0
+                        } else {
+                            0.0
+                        };
+                        let status = if progress.unreviewed == 0 && progress.stale == 0 {
+                            "✓"
+                        } else {
+                            "○"
+                        };
+                        println!(
+                            "{} {:40} {}/{} ({:.0}%)",
+                            status, branch, progress.reviewed, progress.total_hunks, pct
+                        );
+                    }
+                }
+            }
+        }
+        println!("─── refreshing in {}s ───\n", interval);
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
 }
