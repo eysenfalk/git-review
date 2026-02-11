@@ -1,21 +1,46 @@
 use anyhow::{Context, Result, bail};
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use git_review::cli::{self, Commands, GateAction};
 use git_review::gate::{check_gate, disable_gate, enable_gate};
 use git_review::parser::parse_diff;
 use git_review::state::ReviewDb;
-use git_review::tui::run_tui;
+use git_review::tui::{App, run_tui};
 
 fn main() -> Result<()> {
     let args = cli::parse_args();
 
     match args.command {
         None => {
-            // Top-level usage: git-review [range] [--status]
-            let diff_range = args.diff_range.unwrap_or_else(|| "HEAD".to_string());
-            handle_review(&diff_range, args.status)?;
+            match (args.diff_range, args.status) {
+                (Some(range), status) => {
+                    // Explicit range provided — always hunk review
+                    handle_review(&range, status)?;
+                }
+                (None, true) => {
+                    // --status with no range — status for HEAD
+                    handle_review("HEAD", true)?;
+                }
+                (None, false) => {
+                    // No args, no subcommand — auto-detect mode
+                    let current = git_review::git::get_current_branch();
+                    let default_branch = git_review::git::detect_default_branch();
+
+                    match (current, default_branch) {
+                        (Ok(Some(ref branch)), Ok(ref default)) if branch == default => {
+                            handle_dashboard()?;
+                        }
+                        (Ok(Some(_)), Ok(default)) => {
+                            let range = format!("{}..HEAD", default);
+                            handle_review(&range, false)?;
+                        }
+                        _ => {
+                            // Detached HEAD or can't detect branches — fall back
+                            handle_review("HEAD", false)?;
+                        }
+                    }
+                }
+            }
         }
         Some(Commands::Review(review_args)) => {
             let diff_range = review_args.diff_range.unwrap_or_else(|| "HEAD".to_string());
@@ -30,12 +55,14 @@ fn main() -> Result<()> {
                 handle_gate_check()?;
             }
             GateAction::Enable => {
-                let repo_root = find_repo_root()?;
+                let repo_root =
+                    git_review::git::find_repo_root().context("Not in a git repository")?;
                 enable_gate(&repo_root)?;
                 println!("✓ Review gate enabled (pre-commit hook installed)");
             }
             GateAction::Disable => {
-                let repo_root = find_repo_root()?;
+                let repo_root =
+                    git_review::git::find_repo_root().context("Not in a git repository")?;
                 disable_gate(&repo_root)?;
                 println!("✓ Review gate disabled");
             }
@@ -58,13 +85,30 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Handle the dashboard mode — show branch overview.
+fn handle_dashboard() -> Result<()> {
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
+    let default_branch =
+        git_review::git::detect_default_branch().context("Could not detect default branch")?;
+
+    let db_path = repo_root.join(".git/review-state");
+    std::fs::create_dir_all(&db_path)?;
+    let db_file = db_path.join("review.db");
+    let db = ReviewDb::open(&db_file)?;
+
+    let app = App::new_dashboard(db, default_branch)?;
+    run_tui(app)?;
+
+    Ok(())
+}
+
 /// Handle the review command - either launch TUI or show status.
 fn handle_review(diff_range: &str, status_only: bool) -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     let base_ref = normalize_diff_range(diff_range);
 
     // Get the diff
-    let diff_output = get_git_diff(diff_range)?;
+    let diff_output = git_review::git::get_diff(diff_range).context("Failed to get git diff")?;
 
     // Parse the diff
     let files = parse_diff(&diff_output);
@@ -78,12 +122,11 @@ fn handle_review(diff_range: &str, status_only: bool) -> Result<()> {
     let db_path = repo_root.join(".git/review-state");
     std::fs::create_dir_all(&db_path)?;
     let db_file = db_path.join("review.db");
-    let mut db = ReviewDb::open(&db_file)?;
-
-    // Sync with current diff
-    db.sync_with_diff(&base_ref, &files)?;
 
     if status_only {
+        let mut db = ReviewDb::open(&db_file)?;
+        db.sync_with_diff(&base_ref, &files)?;
+
         // Show progress summary
         let progress = db.progress(&base_ref)?;
         println!("Review Progress for {}", diff_range);
@@ -111,8 +154,10 @@ fn handle_review(diff_range: &str, status_only: bool) -> Result<()> {
             println!("\n⚠ Some hunks have become stale (code changed since review)");
         }
     } else {
-        // Launch TUI
-        run_tui(files, db, base_ref)?;
+        // Launch TUI — App::new_hunk_review handles DB sync internally
+        let db = ReviewDb::open(&db_file)?;
+        let app = App::new_hunk_review(files, db, base_ref)?;
+        run_tui(app)?;
     }
 
     Ok(())
@@ -120,11 +165,11 @@ fn handle_review(diff_range: &str, status_only: bool) -> Result<()> {
 
 /// Handle gate check - check if all hunks are reviewed and exit with appropriate code.
 fn handle_gate_check() -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     let base_ref = "HEAD".to_string(); // Gate check uses staged changes
 
     // Get the diff
-    let diff_output = get_git_diff(&base_ref)?;
+    let diff_output = git_review::git::get_diff(&base_ref).context("Failed to get git diff")?;
     let files = parse_diff(&diff_output);
 
     if files.is_empty() {
@@ -160,11 +205,11 @@ fn handle_gate_check() -> Result<()> {
 
 /// Handle commit command - check gate then execute git commit.
 fn handle_commit(git_args: &[String]) -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     let base_ref = "HEAD".to_string();
 
     // Get the diff
-    let diff_output = get_git_diff(&base_ref)?;
+    let diff_output = git_review::git::get_diff(&base_ref).context("Failed to get git diff")?;
     let files = parse_diff(&diff_output);
 
     if files.is_empty() {
@@ -211,7 +256,7 @@ fn handle_commit(git_args: &[String]) -> Result<()> {
 
 /// Handle reset command - clear review state for a diff range.
 fn handle_reset(diff_range: &str) -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     let base_ref = normalize_diff_range(diff_range);
 
     let db_path = repo_root.join(".git/review-state/review.db");
@@ -227,77 +272,16 @@ fn handle_reset(diff_range: &str) -> Result<()> {
     Ok(())
 }
 
-/// Get git diff output for a given range.
-///
-/// Validates the range format to prevent shell injection.
-fn get_git_diff(range: &str) -> Result<String> {
-    // Validate range format to prevent shell injection
-    validate_git_ref(range)?;
-
-    let output = Command::new("git")
-        .arg("diff")
-        .arg(range)
-        .output()
-        .context("Failed to execute git diff")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("git diff failed: {}", stderr);
-    }
-
-    String::from_utf8(output.stdout).context("git diff output is not valid UTF-8")
-}
-
-/// Find the root of the git repository.
-fn find_repo_root() -> Result<PathBuf> {
-    let output = Command::new("git")
-        .arg("rev-parse")
-        .arg("--show-toplevel")
-        .output()
-        .context("Failed to execute git rev-parse")?;
-
-    if !output.status.success() {
-        bail!("Not in a git repository");
-    }
-
-    let path = String::from_utf8(output.stdout)
-        .context("git rev-parse output is not valid UTF-8")?
-        .trim()
-        .to_string();
-
-    Ok(PathBuf::from(path))
-}
-
-/// Validate a git ref to prevent shell injection.
-///
-/// Allows: alphanumeric, dash, underscore, slash, dot, tilde, caret, @
-fn validate_git_ref(ref_str: &str) -> Result<()> {
-    if ref_str.is_empty() {
-        bail!("Empty git ref");
-    }
-
-    // Check for shell metacharacters
-    for ch in ref_str.chars() {
-        if !ch.is_alphanumeric() && !matches!(ch, '-' | '_' | '/' | '.' | '~' | '^' | '@' | ':') {
-            bail!("Invalid character in git ref: '{}'", ch);
-        }
-    }
-
-    Ok(())
-}
-
 /// Normalize a diff range to a consistent base ref format.
-///
-/// Converts "main..HEAD" to "main..HEAD" (as-is) and "HEAD" to "HEAD".
 fn normalize_diff_range(range: &str) -> String {
     range.to_string()
 }
 
 /// Handle approve command - bulk approve hunks.
 fn handle_approve(diff_range: &str, file_filter: Option<&str>) -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     let base_ref = normalize_diff_range(diff_range);
-    let diff_output = get_git_diff(diff_range)?;
+    let diff_output = git_review::git::get_diff(diff_range).context("Failed to get git diff")?;
     let files = parse_diff(&diff_output);
 
     if files.is_empty() {
@@ -323,7 +307,7 @@ fn handle_approve(diff_range: &str, file_filter: Option<&str>) -> Result<()> {
 
 /// Handle watch command - continuously monitor branches.
 fn handle_watch(interval: u64) -> Result<()> {
-    let repo_root = find_repo_root()?;
+    let repo_root = git_review::git::find_repo_root().context("Not in a git repository")?;
     println!("Watching for branches needing review (Ctrl+C to stop)...\n");
 
     loop {
@@ -341,7 +325,7 @@ fn handle_watch(interval: u64) -> Result<()> {
                 continue;
             }
             let diff_range = format!("main..{}", branch);
-            if let Ok(diff_output) = get_git_diff(&diff_range) {
+            if let Ok(diff_output) = git_review::git::get_diff(&diff_range) {
                 let files = parse_diff(&diff_output);
                 if files.is_empty() {
                     continue;

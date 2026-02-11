@@ -10,10 +10,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table, Wrap},
 };
 use std::io;
+use std::time::{Duration, Instant};
 
+use crate::dashboard::Dashboard;
 use crate::{DiffFile, HunkStatus, state::ReviewDb};
 
 /// Filter mode for displaying hunks.
@@ -22,6 +24,13 @@ pub enum FilterMode {
     All,
     Unreviewed,
     Stale,
+}
+
+/// View mode for the TUI.
+#[derive(Debug, Clone)]
+pub enum ViewMode {
+    Dashboard,
+    HunkReview { branch: String, base_ref: String },
 }
 
 /// Confirmation action for bulk operations.
@@ -44,15 +53,40 @@ pub struct App {
     scroll_offset: u16,
     highlighter: crate::highlight::Highlighter,
     confirm_action: Option<ConfirmAction>,
+    pub view_mode: ViewMode,
+    pub dashboard: Option<Dashboard>,
+    status_message: Option<(String, Instant)>,
+    last_refresh: Instant,
 }
 
 impl App {
-    /// Create a new App instance.
-    fn new(files: Vec<DiffFile>, db: ReviewDb, base_ref: String) -> Self {
-        Self {
+    /// Create a new App for hunk review mode.
+    ///
+    /// Syncs files with the database and loads review status.
+    pub fn new_hunk_review(
+        files: Vec<DiffFile>,
+        mut db: ReviewDb,
+        base_ref: String,
+    ) -> Result<Self> {
+        // Sync files with database
+        db.sync_with_diff(&base_ref, &files)
+            .context("Failed to sync with database")?;
+
+        // Update file hunks with database status
+        let mut files = files;
+        for file in &mut files {
+            let file_path = file.path.to_string_lossy();
+            for hunk in &mut file.hunks {
+                if let Ok(status) = db.get_status(&base_ref, &file_path, &hunk.content_hash) {
+                    hunk.status = status;
+                }
+            }
+        }
+
+        Ok(Self {
             files,
             db,
-            base_ref,
+            base_ref: base_ref.clone(),
             selected_file: 0,
             selected_hunk: 0,
             filter: FilterMode::All,
@@ -61,7 +95,40 @@ impl App {
             scroll_offset: 0,
             highlighter: crate::highlight::Highlighter::new(),
             confirm_action: None,
-        }
+            view_mode: ViewMode::HunkReview {
+                branch: String::new(),
+                base_ref,
+            },
+            dashboard: None,
+            status_message: None,
+            last_refresh: Instant::now(),
+        })
+    }
+
+    /// Create a new App for dashboard mode.
+    ///
+    /// Loads all branches and their review progress.
+    pub fn new_dashboard(db: ReviewDb, base_branch: String) -> Result<Self> {
+        let dashboard = Dashboard::load(&db, &base_branch)
+            .map_err(|e| anyhow::anyhow!("Failed to load dashboard: {}", e))?;
+
+        Ok(Self {
+            files: vec![],
+            db,
+            base_ref: base_branch,
+            selected_file: 0,
+            selected_hunk: 0,
+            filter: FilterMode::All,
+            should_quit: false,
+            show_help: false,
+            scroll_offset: 0,
+            highlighter: crate::highlight::Highlighter::new(),
+            confirm_action: None,
+            view_mode: ViewMode::Dashboard,
+            dashboard: Some(dashboard),
+            status_message: None,
+            last_refresh: Instant::now(),
+        })
     }
 
     /// Get currently visible files based on filter mode.
@@ -98,7 +165,7 @@ impl App {
             .collect()
     }
 
-    /// Handle keyboard input.
+    /// Handle keyboard input, dispatching to the appropriate mode handler.
     fn handle_input(&mut self, key: event::KeyEvent) -> Result<()> {
         // Handle confirmation dialog first
         if let Some(action) = self.confirm_action.take() {
@@ -123,6 +190,54 @@ impl App {
             return Ok(());
         }
 
+        match self.view_mode {
+            ViewMode::Dashboard => self.handle_dashboard_input(key),
+            ViewMode::HunkReview { .. } => self.handle_hunk_review_input(key),
+        }
+    }
+
+    /// Handle keyboard input in dashboard mode.
+    fn handle_dashboard_input(&mut self, key: event::KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.should_quit = true;
+            }
+            KeyCode::Char('?') => {
+                self.show_help = true;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut dashboard) = self.dashboard {
+                    dashboard.select_next();
+                    let _ = dashboard.load_detail_for_selected(&self.db);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut dashboard) = self.dashboard {
+                    dashboard.select_prev();
+                    let _ = dashboard.load_detail_for_selected(&self.db);
+                }
+            }
+            KeyCode::Enter => {
+                // Placeholder for drill-in (Step 3.1 will implement)
+                self.status_message =
+                    Some(("Drill-in not yet implemented".to_string(), Instant::now()));
+            }
+            KeyCode::Char('M') => {
+                // Placeholder for merge (Step 4.1 will implement)
+                self.status_message =
+                    Some(("Merge not yet implemented".to_string(), Instant::now()));
+            }
+            KeyCode::Char('r') => {
+                self.try_refresh_dashboard();
+                self.last_refresh = Instant::now();
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Handle keyboard input in hunk review mode.
+    fn handle_hunk_review_input(&mut self, key: event::KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => {
                 self.should_quit = true;
@@ -348,13 +463,153 @@ impl App {
         Ok(())
     }
 
-    /// Render the UI.
+    /// Attempt to refresh the dashboard from git state.
+    fn try_refresh_dashboard(&mut self) {
+        if let Some(ref mut dashboard) = self.dashboard {
+            match dashboard.refresh(&self.db) {
+                Ok(true) => {
+                    let _ = dashboard.load_detail_for_selected(&self.db);
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    self.status_message = Some((format!("Refresh failed: {}", e), Instant::now()));
+                }
+            }
+        }
+    }
+
+    /// Render the UI, dispatching to the appropriate mode renderer.
     fn render(&mut self, frame: &mut Frame) {
+        // Expire old status messages
+        let expired = self
+            .status_message
+            .as_ref()
+            .map(|(_, time)| time.elapsed() >= Duration::from_secs(3))
+            .unwrap_or(false);
+        if expired {
+            self.status_message = None;
+        }
+
         if self.show_help {
             self.render_help(frame);
             return;
         }
 
+        match self.view_mode {
+            ViewMode::Dashboard => self.render_dashboard(frame),
+            ViewMode::HunkReview { .. } => self.render_hunk_review(frame),
+        }
+
+        // Draw confirmation modal on top if active
+        if self.confirm_action.is_some() {
+            self.render_confirm(frame);
+        }
+    }
+
+    /// Render the dashboard view with branch table.
+    fn render_dashboard(&self, frame: &mut Frame) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(3)])
+            .split(frame.area());
+
+        let dashboard = match &self.dashboard {
+            Some(d) => d,
+            None => return,
+        };
+
+        let rows: Vec<Row> = dashboard
+            .items
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| {
+                let is_selected = idx == dashboard.selected;
+                let prefix = if is_selected { ">" } else { " " };
+                let branch_name = &item.branch.name;
+
+                let diff_str = match &item.detail {
+                    Some(d) => format!("+{}/-{}", d.diff_stats.insertions, d.diff_stats.deletions),
+                    None => "-".to_string(),
+                };
+
+                let files_str = match &item.detail {
+                    Some(d) => d.diff_stats.file_count.to_string(),
+                    None => "-".to_string(),
+                };
+
+                let review_str = match &item.progress {
+                    Some(p) if p.total > 0 => {
+                        format!("{:.0}%", (p.reviewed as f64 / p.total as f64) * 100.0)
+                    }
+                    _ => "-".to_string(),
+                };
+
+                let commit_str = &item.branch.last_commit_age;
+
+                let style = if is_selected {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+
+                Row::new(vec![
+                    Cell::from(format!("{} {}", prefix, branch_name)),
+                    Cell::from(diff_str),
+                    Cell::from(files_str),
+                    Cell::from(review_str),
+                    Cell::from(commit_str.clone()),
+                ])
+                .style(style)
+            })
+            .collect();
+
+        let widths = [
+            Constraint::Percentage(35),
+            Constraint::Percentage(15),
+            Constraint::Percentage(10),
+            Constraint::Percentage(15),
+            Constraint::Percentage(25),
+        ];
+
+        let header = Row::new(vec!["Branch", "+/-", "Files", "Review", "Commit"]).style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        let table = Table::new(rows, widths)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Branch Dashboard"),
+            )
+            .header(header);
+
+        frame.render_widget(table, chunks[0]);
+
+        // Status bar
+        let status_text = match &self.status_message {
+            Some((msg, _)) => msg.clone(),
+            None => {
+                let count = dashboard.items.len();
+                format!(
+                    "{} branches | j/k: navigate  Enter: review  M: merge  r: refresh  q: quit",
+                    count
+                )
+            }
+        };
+
+        let status_bar = Paragraph::new(status_text)
+            .block(Block::default().borders(Borders::ALL))
+            .wrap(Wrap { trim: false });
+
+        frame.render_widget(status_bar, chunks[1]);
+    }
+
+    /// Render the hunk review view (existing behavior).
+    fn render_hunk_review(&self, frame: &mut Frame) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
@@ -368,11 +623,6 @@ impl App {
         self.render_file_list(frame, main_chunks[0]);
         self.render_hunk_detail(frame, main_chunks[1]);
         self.render_status_bar(frame, chunks[1]);
-
-        // Draw confirmation modal on top if active
-        if self.confirm_action.is_some() {
-            self.render_confirm(frame);
-        }
     }
 
     /// Render the file list panel.
@@ -525,35 +775,55 @@ impl App {
 
     /// Render the help overlay.
     fn render_help(&self, frame: &mut Frame) {
-        let help_text = vec![
-            "Git Review - Keyboard Shortcuts",
-            "",
-            "Navigation:",
-            "  j / Down      - Next hunk",
-            "  k / Up        - Previous hunk",
-            "  Tab           - Next file",
-            "  Shift+Tab     - Previous file",
-            "  Ctrl+d/PgDn  - Scroll down",
-            "  Ctrl+u/PgUp  - Scroll up",
-            "",
-            "Actions:",
-            "  Space         - Toggle reviewed status",
-            "",
-            "Bulk Actions:",
-            "  F (Shift+F)   - Approve all hunks in current file",
-            "  A (Shift+A)   - Approve all hunks in all files",
-            "",
-            "Filters:",
-            "  u             - Show unreviewed hunks only",
-            "  s             - Show stale hunks only",
-            "  a             - Show all hunks",
-            "",
-            "Other:",
-            "  ?             - Show this help",
-            "  q / Esc       - Quit",
-            "",
-            "Press any key to close this help",
-        ];
+        let help_text: Vec<&str> = match self.view_mode {
+            ViewMode::Dashboard => vec![
+                "Git Review - Dashboard Shortcuts",
+                "",
+                "Navigation:",
+                "  j / Down      - Next branch",
+                "  k / Up        - Previous branch",
+                "",
+                "Actions:",
+                "  Enter         - Review selected branch",
+                "  M (Shift+M)   - Merge selected branch",
+                "  r             - Refresh branch list",
+                "",
+                "Other:",
+                "  ?             - Show this help",
+                "  q / Esc       - Quit",
+                "",
+                "Press any key to close this help",
+            ],
+            ViewMode::HunkReview { .. } => vec![
+                "Git Review - Keyboard Shortcuts",
+                "",
+                "Navigation:",
+                "  j / Down      - Next hunk",
+                "  k / Up        - Previous hunk",
+                "  Tab           - Next file",
+                "  Shift+Tab     - Previous file",
+                "  Ctrl+d/PgDn  - Scroll down",
+                "  Ctrl+u/PgUp  - Scroll up",
+                "",
+                "Actions:",
+                "  Space         - Toggle reviewed status",
+                "",
+                "Bulk Actions:",
+                "  F (Shift+F)   - Approve all hunks in current file",
+                "  A (Shift+A)   - Approve all hunks in all files",
+                "",
+                "Filters:",
+                "  u             - Show unreviewed hunks only",
+                "  s             - Show stale hunks only",
+                "  a             - Show all hunks",
+                "",
+                "Other:",
+                "  ?             - Show this help",
+                "  q / Esc       - Quit",
+                "",
+                "Press any key to close this help",
+            ],
+        };
 
         let text = Text::from(help_text.iter().map(|&s| Line::from(s)).collect::<Vec<_>>());
 
@@ -652,22 +922,9 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Re
 }
 
 /// Launch the interactive TUI review interface.
-pub fn run_tui(files: Vec<DiffFile>, mut db: ReviewDb, base_ref: String) -> Result<()> {
-    // Sync files with database
-    db.sync_with_diff(&base_ref, &files)
-        .context("Failed to sync with database")?;
-
-    // Update file hunks with database status
-    let mut files = files;
-    for file in &mut files {
-        let file_path = file.path.to_string_lossy();
-        for hunk in &mut file.hunks {
-            if let Ok(status) = db.get_status(&base_ref, &file_path, &hunk.content_hash) {
-                hunk.status = status;
-            }
-        }
-    }
-
+///
+/// Accepts a pre-configured App (created via `App::new_hunk_review` or `App::new_dashboard`).
+pub fn run_tui(mut app: App) -> Result<()> {
     // Setup panic hook to restore terminal
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -677,7 +934,6 @@ pub fn run_tui(files: Vec<DiffFile>, mut db: ReviewDb, base_ref: String) -> Resu
     }));
 
     let mut terminal = setup_terminal()?;
-    let mut app = App::new(files, db, base_ref);
 
     // Main event loop
     let result = (|| -> Result<()> {
@@ -690,14 +946,21 @@ pub fn run_tui(files: Vec<DiffFile>, mut db: ReviewDb, base_ref: String) -> Resu
                 break;
             }
 
-            if event::poll(std::time::Duration::from_millis(100))
-                .context("Failed to poll events")?
+            if event::poll(Duration::from_millis(200)).context("Failed to poll events")?
                 && let Event::Key(key) = event::read().context("Failed to read event")?
             {
                 // Ignore key release events
                 if key.kind == event::KeyEventKind::Press {
                     app.handle_input(key)?;
                 }
+            }
+
+            // Auto-refresh in dashboard mode (every 5 seconds)
+            if matches!(app.view_mode, ViewMode::Dashboard)
+                && app.last_refresh.elapsed() >= Duration::from_secs(5)
+            {
+                app.try_refresh_dashboard();
+                app.last_refresh = Instant::now();
             }
         }
         Ok(())
