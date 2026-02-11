@@ -13,6 +13,12 @@ Linear ticket: ENG-2.
 - Keep README.md updated when adding features or changing behavior
 - Do what has been asked; nothing more, nothing less
 
+## Resource Constraints
+
+- NEVER spawn more than 3 concurrent agents. Previous sessions repeatedly crashed with OOM errors from excessive agent spawning.
+- When resuming after a crash, always check for stale teams/worktrees before spawning new agents.
+- If a session feels sluggish or memory-constrained, reduce agent count before it becomes an OOM.
+
 ## File Organization
 
 - `/src/parser/` — git diff parsing
@@ -53,6 +59,12 @@ cargo check                # Type check only
 - ALWAYS run `cargo test` after code changes
 - ALWAYS run `cargo check` before committing
 - ALWAYS run `cargo clippy` before opening PRs
+
+### Hook Testing
+
+- After modifying any hook script in `.claude/hooks/`, run `bash tests/hooks/run_hook_tests.sh`
+- When creating test files, be aware that `protect-hooks.sh` may block writes to hook-adjacent paths — if blocked, report to team lead immediately
+- Ensure git test environments have `user.email` and `user.name` configured
 
 ## TDD Enforcement
 
@@ -228,6 +240,12 @@ All 10 Claude-Flow daemon workers run continuously:
 - **Observable behavior:** tmux panes show agent activity; background workers run invisibly
 - **Token efficiency:** Serena's LSP-powered navigation reads only what's needed (50-75% savings over full-file reads)
 
+## Memory & Observation
+
+- Memory observer agents are DEPRECATED — use `/checkpoint` skill instead
+- If observers must be used: only record what was actually observed. Never fabricate details.
+- If a session has minimal activity, record that limitation explicitly rather than padding with assumptions
+
 ## Data Workflow (ENFORCED)
 
 - **Linear** = single source of truth for requirements, status, and acceptance criteria
@@ -335,6 +353,13 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 - Avoid assigning multiple teammates to the same file to prevent conflicts
 - Use `TaskCreate` / `TaskUpdate` for coordinating work across teammates
 
+### Enforcement Hooks Awareness
+
+- Enforcement hooks (`enforce-ticket`, `protect-hooks`, `enforce-orchestrator-delegation-v2`) can block Claude's own edits and bash commands. When working on hook-protected paths:
+  1. Check which hooks are active in `.claude/settings.json` before editing
+  2. If blocked, report back to team lead rather than repeatedly retrying
+  3. Never attempt to disable or bypass enforcement hooks
+
 ## Agent Routing
 
 ### Agent Pipeline (ordered workflow)
@@ -372,3 +397,9 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 - Do NOT assume UTF-8 for all diff content (handle binary gracefully)
 - Do NOT block the TUI event loop with synchronous I/O
 - Do NOT use `unwrap()` in library code; reserve for tests only
+
+### Shell/Regex Patterns
+
+- When writing regex in shell hooks, always test edge cases: dashes as grep options (use `--`), underscores in character classes, special chars in branch names
+- Run `cargo build` and `cargo test` after any Rust changes before reporting completion
+- Prefer `grep -E` over `egrep` (deprecated) and always use `--` before patterns that might start with `-`
