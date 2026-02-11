@@ -86,6 +86,11 @@
           },
           {
             "type": "command",
+            "command": ".claude/hooks/enforce-agent-cap.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
             "command": "[ -n \"$TOOL_INPUT_prompt\" ] && npx @claude-flow/cli@latest hooks pre-task --task-id \"task-$(date +%s)\" --description \"$TOOL_INPUT_prompt\" 2>/dev/null || true",
             "timeout": 5000,
             "continueOnError": true
