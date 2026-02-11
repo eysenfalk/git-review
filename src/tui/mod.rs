@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use std::io;
 
@@ -22,6 +22,13 @@ pub enum FilterMode {
     All,
     Unreviewed,
     Stale,
+}
+
+/// Confirmation action for bulk operations.
+#[derive(Debug, Clone)]
+enum ConfirmAction {
+    ApproveAllFile { file_idx: usize },
+    ApproveAll,
 }
 
 /// Application state for the TUI.
@@ -36,6 +43,7 @@ pub struct App {
     show_help: bool,
     scroll_offset: u16,
     highlighter: crate::highlight::Highlighter,
+    confirm_action: Option<ConfirmAction>,
 }
 
 impl App {
@@ -52,6 +60,7 @@ impl App {
             show_help: false,
             scroll_offset: 0,
             highlighter: crate::highlight::Highlighter::new(),
+            confirm_action: None,
         }
     }
 
@@ -91,6 +100,23 @@ impl App {
 
     /// Handle keyboard input.
     fn handle_input(&mut self, key: event::KeyEvent) -> Result<()> {
+        // Handle confirmation dialog first
+        if let Some(action) = self.confirm_action.take() {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => match action {
+                    ConfirmAction::ApproveAllFile { file_idx } => {
+                        self.selected_file = file_idx;
+                        self.approve_current_file()?;
+                    }
+                    ConfirmAction::ApproveAll => {
+                        self.approve_all()?;
+                    }
+                },
+                _ => {} // Any other key cancels
+            }
+            return Ok(());
+        }
+
         if self.show_help {
             // Any key closes help
             self.show_help = false;
@@ -136,6 +162,20 @@ impl App {
             KeyCode::Char('a') => {
                 self.filter = FilterMode::All;
                 self.reset_selection();
+            }
+            KeyCode::Char('F') => {
+                // Shift+F: approve current file (with confirmation)
+                if self.selected_file < self.files.len() {
+                    self.confirm_action = Some(ConfirmAction::ApproveAllFile {
+                        file_idx: self.selected_file,
+                    });
+                }
+            }
+            KeyCode::Char('A') => {
+                // Shift+A: approve all (with confirmation)
+                if !self.files.is_empty() {
+                    self.confirm_action = Some(ConfirmAction::ApproveAll);
+                }
             }
             KeyCode::PageDown => {
                 self.scroll_offset = self.scroll_offset.saturating_add(20);
@@ -249,6 +289,65 @@ impl App {
         Ok(())
     }
 
+    /// Approve all hunks in the currently selected file.
+    fn approve_current_file(&mut self) -> Result<()> {
+        if self.selected_file >= self.files.len() {
+            return Ok(());
+        }
+        let file = &self.files[self.selected_file];
+        let file_path = file.path.to_string_lossy().to_string();
+        // Collect hashes to approve
+        let to_approve: Vec<(String, usize)> = file
+            .hunks
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| h.status != HunkStatus::Reviewed)
+            .map(|(i, h)| (h.content_hash.clone(), i))
+            .collect();
+        // Update DB
+        for (hash, _) in &to_approve {
+            self.db
+                .set_status(&self.base_ref, &file_path, hash, HunkStatus::Reviewed)
+                .context("Failed to approve hunk")?;
+        }
+        // Update in-memory state
+        let file = &mut self.files[self.selected_file];
+        for (_, idx) in &to_approve {
+            file.hunks[*idx].status = HunkStatus::Reviewed;
+        }
+        Ok(())
+    }
+
+    /// Approve all hunks in all files.
+    fn approve_all(&mut self) -> Result<()> {
+        // Collect all hunks to approve
+        let mut to_approve: Vec<(usize, usize, String, String)> = Vec::new();
+        for (file_idx, file) in self.files.iter().enumerate() {
+            let file_path = file.path.to_string_lossy().to_string();
+            for (hunk_idx, hunk) in file.hunks.iter().enumerate() {
+                if hunk.status != HunkStatus::Reviewed {
+                    to_approve.push((
+                        file_idx,
+                        hunk_idx,
+                        file_path.clone(),
+                        hunk.content_hash.clone(),
+                    ));
+                }
+            }
+        }
+        // Update DB
+        for (_, _, file_path, hash) in &to_approve {
+            self.db
+                .set_status(&self.base_ref, file_path, hash, HunkStatus::Reviewed)
+                .context("Failed to approve hunk")?;
+        }
+        // Update in-memory state
+        for (file_idx, hunk_idx, _, _) in &to_approve {
+            self.files[*file_idx].hunks[*hunk_idx].status = HunkStatus::Reviewed;
+        }
+        Ok(())
+    }
+
     /// Render the UI.
     fn render(&mut self, frame: &mut Frame) {
         if self.show_help {
@@ -269,6 +368,11 @@ impl App {
         self.render_file_list(frame, main_chunks[0]);
         self.render_hunk_detail(frame, main_chunks[1]);
         self.render_status_bar(frame, chunks[1]);
+
+        // Draw confirmation modal on top if active
+        if self.confirm_action.is_some() {
+            self.render_confirm(frame);
+        }
     }
 
     /// Render the file list panel.
@@ -404,7 +508,7 @@ impl App {
         };
 
         let status_text = format!(
-            "{}/{} hunks reviewed ({} stale), {} files remaining | Filter: {} | Keys: j/k=nav Space=toggle Tab=file u/s/a=filter ?=help q=quit",
+            "{}/{} hunks reviewed ({} stale), {} files remaining | Filter: {} | Keys: j/k=nav Space=toggle F=approve-file A=approve-all Tab=file u/s/a=filter ?=help q=quit",
             progress.reviewed,
             progress.total_hunks,
             progress.stale,
@@ -435,6 +539,10 @@ impl App {
             "Actions:",
             "  Space         - Toggle reviewed status",
             "",
+            "Bulk Actions:",
+            "  F (Shift+F)   - Approve all hunks in current file",
+            "  A (Shift+A)   - Approve all hunks in all files",
+            "",
             "Filters:",
             "  u             - Show unreviewed hunks only",
             "  s             - Show stale hunks only",
@@ -454,6 +562,47 @@ impl App {
             .wrap(Wrap { trim: false });
 
         let area = centered_rect(60, 80, frame.area());
+        frame.render_widget(paragraph, area);
+    }
+
+    /// Render the confirmation modal.
+    fn render_confirm(&self, frame: &mut Frame) {
+        let message = match &self.confirm_action {
+            Some(ConfirmAction::ApproveAllFile { file_idx }) => {
+                let file_path = self.files[*file_idx].path.to_string_lossy();
+                let count = self.files[*file_idx]
+                    .hunks
+                    .iter()
+                    .filter(|h| h.status != HunkStatus::Reviewed)
+                    .count();
+                format!(
+                    "Approve {} unreviewed hunks in {}?\n\n(y)es / (n)o",
+                    count, file_path
+                )
+            }
+            Some(ConfirmAction::ApproveAll) => {
+                let count: usize = self
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.hunks)
+                    .filter(|h| h.status != HunkStatus::Reviewed)
+                    .count();
+                format!(
+                    "Approve {} unreviewed hunks in all files?\n\n(y)es / (n)o",
+                    count
+                )
+            }
+            None => return,
+        };
+
+        let paragraph = Paragraph::new(message)
+            .block(Block::default().borders(Borders::ALL).title("Confirm"))
+            .wrap(Wrap { trim: false })
+            .style(Style::default().fg(Color::Yellow));
+
+        let area = centered_rect(50, 30, frame.area());
+        // Clear the area first
+        frame.render_widget(Clear, area);
         frame.render_widget(paragraph, area);
     }
 }
