@@ -2,13 +2,18 @@
 # Hook: Verify claude-mem usage
 # Matcher: Stop hook (runs at session end)
 
-set -euo pipefail
+set -uo pipefail
 
-# Read JSON input from stdin
-INPUT=$(cat)
+# Read JSON input from stdin (may be empty or invalid)
+INPUT=$(cat 2>/dev/null || true)
+
+# If input is empty or not valid JSON, just exit cleanly
+if [[ -z "$INPUT" ]] || ! echo "$INPUT" | jq empty 2>/dev/null; then
+  exit 0
+fi
 
 # Extract transcript path if available
-TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)
 
 # If we have a transcript path, check for claude-mem usage
 if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
