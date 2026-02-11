@@ -207,6 +207,45 @@ impl ReviewDb {
             .execute("DELETE FROM hunks WHERE base_ref = ?1", params![base_ref])?;
         Ok(())
     }
+
+    /// Approve all hunks for a given base ref (mark all as Reviewed).
+    ///
+    /// Returns the count of hunks that were updated.
+    pub fn approve_all(&mut self, base_ref: &str) -> Result<usize> {
+        let count = self.conn.execute(
+            "UPDATE hunks SET status = 'reviewed', reviewed_at = datetime('now')
+             WHERE base_ref = ?1 AND status != 'reviewed'",
+            params![base_ref],
+        )?;
+        Ok(count)
+    }
+
+    /// Approve all hunks for a specific file within a base ref.
+    ///
+    /// Returns the count of hunks that were updated.
+    pub fn approve_file(&mut self, base_ref: &str, file_path: &str) -> Result<usize> {
+        let count = self.conn.execute(
+            "UPDATE hunks SET status = 'reviewed', reviewed_at = datetime('now')
+             WHERE base_ref = ?1 AND file_path = ?2 AND status != 'reviewed'",
+            params![base_ref, file_path],
+        )?;
+        Ok(count)
+    }
+
+    /// List all distinct base refs in the database (for dashboard).
+    ///
+    /// Returns base refs sorted alphabetically.
+    pub fn list_base_refs(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT base_ref FROM hunks ORDER BY base_ref")?;
+
+        let refs = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<String>, _>>()?;
+
+        Ok(refs)
+    }
 }
 
 /// Convert HunkStatus to string representation for database storage.
