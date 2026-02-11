@@ -17,17 +17,32 @@ fi
 
 # Only gate files in the plans/ directory — that's where plan/spec/critique files live
 if [[ "$FILE_PATH" =~ plans/ ]]; then
-  # Extract agent name from session metadata or environment
-  AGENT_NAME=$(echo "$INPUT" | jq -r '.session_id // empty' | grep -oP 'planner|Planner' || echo "")
+  # Check if this is a planner agent or the orchestrator (team lead)
+  SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 
-  # Also check environment variable if available
-  if [[ -z "$AGENT_NAME" ]] && [[ -n "${CLAUDE_AGENT_NAME:-}" ]]; then
-    if [[ "$CLAUDE_AGENT_NAME" =~ planner|Planner ]]; then
-      AGENT_NAME="planner"
-    fi
+  # Allow if session_id contains "planner"
+  if echo "$SESSION_ID" | grep -qiE 'planner'; then
+    exit 0
   fi
 
-  # If not a planner agent, block the operation
+  # Allow if CLAUDE_AGENT_NAME contains "planner"
+  if [[ -n "${CLAUDE_AGENT_NAME:-}" ]] && echo "$CLAUDE_AGENT_NAME" | grep -qiE 'planner'; then
+    exit 0
+  fi
+
+  # Allow if this is the orchestrator (team lead) — identified by having no
+  # agent marker in session_id (it's the root session) or containing "team-lead"
+  if echo "$SESSION_ID" | grep -qiE 'team-lead'; then
+    exit 0
+  fi
+
+  # Allow if session_id doesn't contain an @ sign (root orchestrator session)
+  if [[ -n "$SESSION_ID" ]] && ! echo "$SESSION_ID" | grep -q '@'; then
+    exit 0
+  fi
+
+  # Block non-planner, non-orchestrator agents
+  AGENT_NAME=""
   if [[ -z "$AGENT_NAME" ]]; then
     echo "{
   \"hookSpecificOutput\": {
