@@ -601,6 +601,141 @@ test_hook \
 echo ""
 
 # =========================================
+# Test 9: enforce-ticket.sh (UserPromptSubmit)
+# =========================================
+echo "Testing: enforce-ticket.sh"
+echo "------------------------------------------"
+
+HOOK="$HOOKS_DIR/enforce-ticket.sh"
+
+# Helper: Create UserPromptSubmit event JSON
+create_user_prompt_input() {
+    local cwd="$1"
+    cat <<EOF
+{
+  "prompt": "test prompt",
+  "cwd": "$cwd",
+  "hook_event_name": "UserPromptSubmit"
+}
+EOF
+}
+
+# Helper: Test UserPromptSubmit hook (uses decision/reason JSON, not exit codes)
+test_prompt_hook() {
+    local test_name="$1"
+    local hook_script="$2"
+    local input_json="$3"
+    local expected_result="$4"  # "allow" or "block"
+
+    local output
+    output=$(echo "$input_json" | bash "$hook_script" 2>/dev/null || true)
+
+    if [[ "$expected_result" == "allow" ]]; then
+        # Allow = no output or no "decision":"block"
+        if [[ -z "$output" ]] || ! echo "$output" | jq -e '.decision == "block"' &>/dev/null; then
+            echo -e "${GREEN}✓ PASS${NC}: $test_name (allowed)"
+            PASS=$((PASS + 1))
+            return 0
+        else
+            echo -e "${RED}✗ FAIL${NC}: $test_name"
+            echo "  Expected: allow, Got: $output"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+    elif [[ "$expected_result" == "block" ]]; then
+        if echo "$output" | jq -e '.decision == "block"' &>/dev/null; then
+            local reason
+            reason=$(echo "$output" | jq -r '.reason // empty')
+            echo -e "${GREEN}✓ PASS${NC}: $test_name (blocked: $reason)"
+            PASS=$((PASS + 1))
+            return 0
+        else
+            echo -e "${RED}✗ FAIL${NC}: $test_name"
+            echo "  Expected: block, Got: $output"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
+    fi
+}
+
+# Create temp git repos for testing
+TICKET_TEST_DIR="$TEST_DIR/ticket-tests"
+mkdir -p "$TICKET_TEST_DIR"
+
+# Repo on main branch
+MAIN_REPO="$TICKET_TEST_DIR/main-repo"
+mkdir -p "$MAIN_REPO"
+(cd "$MAIN_REPO" && git init -b main && git config user.email "test@test.com" && git config user.name "Test" && touch x && git add x && git commit -m "init") &>/dev/null
+
+# Repo on master branch
+MASTER_REPO="$TICKET_TEST_DIR/master-repo"
+mkdir -p "$MASTER_REPO"
+(cd "$MASTER_REPO" && git init -b master && git config user.email "test@test.com" && git config user.name "Test" && touch x && git add x && git commit -m "init") &>/dev/null
+
+# Repo on branch without ticket ID
+NO_TICKET_REPO="$TICKET_TEST_DIR/no-ticket-repo"
+mkdir -p "$NO_TICKET_REPO"
+(cd "$NO_TICKET_REPO" && git init -b main && git config user.email "test@test.com" && git config user.name "Test" && touch x && git add x && git commit -m "init" && git checkout -b feature-something) &>/dev/null
+
+# Repo on branch with valid ticket ID
+VALID_TICKET_REPO="$TICKET_TEST_DIR/valid-ticket-repo"
+mkdir -p "$VALID_TICKET_REPO"
+(cd "$VALID_TICKET_REPO" && git init -b main && git config user.email "test@test.com" && git config user.name "Test" && touch x && git add x && git commit -m "init" && git checkout -b feat/eng-18-add-hook) &>/dev/null
+
+# Repo on branch with uppercase ticket ID
+UPPER_TICKET_REPO="$TICKET_TEST_DIR/upper-ticket-repo"
+mkdir -p "$UPPER_TICKET_REPO"
+(cd "$UPPER_TICKET_REPO" && git init -b main && git config user.email "test@test.com" && git config user.name "Test" && touch x && git add x && git commit -m "init" && git checkout -b chore/ENG-42-something) &>/dev/null
+
+# Non-git directory
+NON_GIT_DIR="$TICKET_TEST_DIR/non-git"
+mkdir -p "$NON_GIT_DIR"
+
+# Test 9.1: BLOCK - on main branch
+test_prompt_hook \
+    "9.1: Block on main branch" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$MAIN_REPO")" \
+    "block"
+
+# Test 9.2: BLOCK - on master branch
+test_prompt_hook \
+    "9.2: Block on master branch" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$MASTER_REPO")" \
+    "block"
+
+# Test 9.3: BLOCK - branch without ticket ID
+test_prompt_hook \
+    "9.3: Block branch without ticket ID" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$NO_TICKET_REPO")" \
+    "block"
+
+# Test 9.4: ALLOW - branch with valid ticket ID
+test_prompt_hook \
+    "9.4: Allow branch with valid ticket ID (eng-18)" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$VALID_TICKET_REPO")" \
+    "allow"
+
+# Test 9.5: ALLOW - branch with uppercase ticket ID (case-insensitive)
+test_prompt_hook \
+    "9.5: Allow branch with uppercase ticket ID (ENG-42)" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$UPPER_TICKET_REPO")" \
+    "allow"
+
+# Test 9.6: ALLOW - non-git directory (fail open)
+test_prompt_hook \
+    "9.6: Allow non-git directory (fail open)" \
+    "$HOOK" \
+    "$(create_user_prompt_input "$NON_GIT_DIR")" \
+    "allow"
+
+echo ""
+
+# =========================================
 # Summary
 # =========================================
 echo "=========================================="

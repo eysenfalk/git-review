@@ -161,6 +161,11 @@ Hooks run in this exact order to ensure enforcement before learning:
 **TeammateIdle (agent going idle):**
 1. `.claude/hooks/enforce-idle-quality.sh` (blocking — runs `cargo test` + `cargo clippy` before idle; skips if no source changes)
 
+**UserPromptSubmit (every prompt):**
+1. `.claude/hooks/enforce-ticket.sh` (blocking — requires branch with ticket ID)
+2. Claude-Flow routing hook (non-blocking)
+3. `.claude/hooks/workflow-reminder.sh` (advisory)
+
 ### Memory Separation
 
 - **claude-mem:** User preferences, architectural decisions, debugging insights, cross-session learnings (human-driven)
@@ -231,6 +236,14 @@ All 10 Claude-Flow daemon workers run continuously:
 - Requirements, specs, critiques, and review results go to **Linear comments**, not local files
 
 ## Git Workflow
+
+### No Ticket, No Work (ENFORCED by hook)
+
+Every piece of work MUST have a Linear ticket before starting:
+- Create the ticket in Linear FIRST
+- Create a branch referencing the ticket ID
+- The `enforce-ticket.sh` hook blocks prompts on branches without ticket IDs
+- This applies to ALL work: features, fixes, docs, chores
 
 ### Branch Naming (ENFORCED by hook)
 

@@ -143,6 +143,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": ".claude/hooks/enforce-ticket.sh",
+            "timeout": 3000
+          },
+          {
+            "type": "command",
             "command": "[ -n \"$PROMPT\" ] && npx @claude-flow/cli@latest hooks route --task \"$PROMPT\" || true",
             "timeout": 5000,
             "continueOnError": true

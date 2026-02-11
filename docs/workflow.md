@@ -41,12 +41,17 @@ flowchart TD
     H3Agent -->|Yes| H4
 
     H4 --> H4Check{unwrap() in src/ non-test?}
-    H4Check -->|No| H5[Claude-Flow pre-edit]
+    H4Check -->|No| H5[scan-secrets.sh]
     H4Check -->|Yes| H4Warn[ADVISORY: unwrap() warning]
     H4Warn --> H5
 
-    H5 --> H5Result{continueOnError: true}
-    H5Result --> Allow[Allow: Tool executes]
+    H5 --> H5Check{Secrets detected?}
+    H5Check -->|No| H6[Claude-Flow pre-edit]
+    H5Check -->|Yes| H5Warn[ADVISORY: Secret warning]
+    H5Warn --> H6
+
+    H6 --> H6Result{continueOnError: true}
+    H6Result --> Allow[Allow: Tool executes]
 
     H2Deny --> Block[Block: Tool denied]
     H3Deny --> Block
@@ -150,6 +155,49 @@ flowchart TD
     H2Saved -->|Yes| Allow
     H2Saved -->|No| H2Advisory[ADVISORY: Suggest saving patterns]
     H2Advisory --> Allow
+```
+
+### TaskCompleted (Task Marked Done)
+
+```mermaid
+flowchart TD
+    Start[TaskUpdate status=completed] --> H1[enforce-task-quality.sh]
+    H1 --> H1Check{Task involves code changes?}
+    H1Check -->|No| Allow[Allow: Task completes]
+    H1Check -->|Yes| H1Tests{cargo test passes?}
+    H1Tests -->|No| Block[DENY: Tests must pass]
+    H1Tests -->|Yes| H1Clippy{cargo clippy passes?}
+    H1Clippy -->|No| Block
+    H1Clippy -->|Yes| Allow
+```
+
+### TeammateIdle (Agent Going Idle)
+
+```mermaid
+flowchart TD
+    Start[Agent Turn Ending] --> H1[enforce-idle-quality.sh]
+    H1 --> H1Check{Source files changed?}
+    H1Check -->|No| Allow[Allow: Agent goes idle]
+    H1Check -->|Yes| H1Tests{cargo test passes?}
+    H1Tests -->|No| Block[DENY: Tests must pass]
+    H1Tests -->|Yes| H1Clippy{cargo clippy passes?}
+    H1Clippy -->|No| Block
+    H1Clippy -->|Yes| Allow
+```
+
+### UserPromptSubmit (User Sends Message)
+
+```mermaid
+flowchart TD
+    Start[User Prompt Submitted] --> H1[enforce-ticket.sh]
+    H1 --> H1Check{Branch has ticket ID?}
+    H1Check -->|No| Block[BLOCK: No ticket, no work]
+    H1Check -->|Yes| H2[Claude-Flow routing]
+    H1Check -->|main/master| Block
+    H2 --> H2Result{continueOnError: true}
+    H2Result --> H3[workflow-reminder.sh]
+    H3 --> H3Advisory[ADVISORY: Workflow reminders]
+    H3Advisory --> Allow[Allow: Prompt processes]
 ```
 
 ---
@@ -267,7 +315,7 @@ flowchart TD
 ```mermaid
 flowchart TB
     subgraph Custom["Our Custom System (Blocking Enforcement)"]
-        Hooks1[8 Enforcement Hooks<br/>protect-main.sh<br/>enforce-branch-naming.sh<br/>enforce-review-gate.sh<br/>enforce-orchestrator-delegation-v2.sh<br/>enforce-plan-files.sh<br/>protect-hooks.sh<br/>check-unwrap.sh<br/>enforce-visible-agents.sh]
+        Hooks1[15 Enforcement Hooks<br/>BLOCKING: protect-main, enforce-branch-naming<br/>enforce-review-gate, enforce-orchestrator-delegation-v2<br/>enforce-plan-files, enforce-visible-agents<br/>enforce-task-quality, enforce-idle-quality<br/>ASK: protect-hooks<br/>ADVISORY: check-unwrap, scan-secrets<br/>enforce-serena-usage, enforce-memory<br/>check-claude-flow-memory, workflow-reminder]
 
         Teams1[Native Agent Teams<br/>TeamCreate + Task<br/>Visible tmux panes<br/>SendMessage coordination]
 
@@ -348,6 +396,9 @@ flowchart TB
 | | | | | |
 | **Code Quality** | | | | |
 | No unwrap() in library code | **ADVISORY** | `check-unwrap.sh` | None - this is a warning only | Warns on unwrap() in src/ non-test files, doesn't block |
+| No secrets in code | **ADVISORY** | `scan-secrets.sh` | None - this is a warning only | Detects potential secrets/credentials in Write/Edit, doesn't block |
+| Tests pass before task completion | **DENY** | `enforce-task-quality.sh` | Skips non-code tasks | Blocks TaskUpdate(status=completed) until cargo test + clippy pass |
+| Tests pass before agent idle | **DENY** | `enforce-idle-quality.sh` | Skips if no source changes | Blocks TeammateIdle until cargo test + clippy pass |
 | | | | | |
 | **Hook Protection** | | | | |
 | Hook modifications require approval | **ASK** | `protect-hooks.sh` | User can approve any change | Prompts user before modifying .claude/hooks/ |
@@ -358,6 +409,12 @@ flowchart TB
 | **Memory Usage** | | | | |
 | Use claude-mem for session insights | **ADVISORY** | `enforce-memory.sh` | None - this is a reminder | Reminds on session end if claude-mem not used |
 | Save patterns to Claude-Flow | **ADVISORY** | `check-claude-flow-memory.sh` | None - this is a reminder | Reminds on session end if code modified but no patterns saved |
+| | | | | |
+| **Ticket Tracking** | | | | |
+| No ticket, no work | **DENY** | `enforce-ticket.sh` | Fails open on non-git dirs | Blocks prompts on main or branches without ticket IDs |
+| | | | | |
+| **Workflow Reminders** | | | | |
+| General workflow reminders | **ADVISORY** | `workflow-reminder.sh` | None - this is a reminder | Provides workflow context on UserPromptSubmit |
 | | | | | |
 | **Data Workflow** | | | | |
 | Linear is source of truth | **NONE** | Documented in CLAUDE.md | No technical enforcement | Convention only - agents should read/write Linear |
@@ -428,6 +485,21 @@ These rules are **technically enforced** and **cannot be bypassed** (or have ver
    - Bypass: Detection is fragile - depends on agent name being present
    - Enforcement: Blocks non-planner writes to plans/ directory
 
+8. **Tests must pass before task completion** (`enforce-task-quality.sh`)
+   - Detection: Runs `cargo test` and `cargo clippy` when TaskUpdate sets status=completed
+   - Bypass: Skips check for non-code tasks (detects by checking for src/ changes)
+   - Enforcement: Blocks task completion if tests fail or clippy has errors
+
+9. **Tests must pass before agent goes idle** (`enforce-idle-quality.sh`)
+   - Detection: Runs `cargo test` and `cargo clippy` when agent turn ends (TeammateIdle)
+   - Bypass: Skips check if no source files were modified
+   - Enforcement: Blocks agent idle state if tests fail or clippy has errors
+
+10. **No ticket, no work** (`enforce-ticket.sh`)
+    - Detection: Checks current branch for `(eng|anx)-[0-9]+` ticket ID pattern
+    - Bypass: Fails open on non-git directories and detached HEAD
+    - Enforcement: Blocks all prompts on main/master or branches without ticket IDs
+
 ### 🟡 Prompted Enforcement (ASK - Requires Approval)
 
 These rules **ask for user confirmation** before proceeding:
@@ -456,6 +528,14 @@ These rules **provide context but don't block**:
 4. **Save patterns to Claude-Flow memory** (`check-claude-flow-memory.sh`)
    - Detection: Checks transcript for code modifications + `mcp__claude-flow__memory_store` on session end
    - Enforcement: Reminder message only
+
+5. **No secrets in code** (`scan-secrets.sh`)
+   - Detection: Scans Write/Edit/MultiEdit content for patterns like API keys, tokens, passwords
+   - Enforcement: Warning message only, doesn't block
+
+6. **General workflow reminders** (`workflow-reminder.sh`)
+   - Detection: Fires on every UserPromptSubmit
+   - Enforcement: Provides workflow context and reminders, doesn't block
 
 ### ⚪ No Technical Enforcement (Documentation Only)
 
@@ -518,12 +598,12 @@ These rules are **documented in CLAUDE.md but not enforced by hooks**:
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| **Hard Enforcement (DENY)** | 7 rules | ~17% |
+| **Hard Enforcement (DENY)** | 10 rules | ~24% |
 | **Prompted Enforcement (ASK)** | 1 rule | ~2% |
-| **Advisory Enforcement (warnings)** | 4 rules | ~10% |
-| **No Technical Enforcement** | ~30 rules | ~71% |
+| **Advisory Enforcement (warnings)** | 6 rules | ~15% |
+| **No Technical Enforcement** | 24 rules | ~59% |
 
-**Key Takeaway:** The majority of workflow rules (~71%) rely on documentation and manual compliance. Only 19% have any form of technical enforcement (7 hard denials + 1 ask prompt). The remaining 10% are advisory suggestions.
+**Key Takeaway:** The majority of workflow rules (~59%) rely on documentation and manual compliance. About 27% have some form of technical enforcement (10 hard denials + 1 ask prompt). The remaining 15% are advisory suggestions that guide but don't block actions.
 
 ### Known Limitations
 
@@ -537,7 +617,7 @@ These rules are **documented in CLAUDE.md but not enforced by hooks**:
 
 5. **Whitelist Bypass**: `enforce-orchestrator-delegation-v2.sh` allows orchestrator to edit certain directories (.claude/, docs/, README.md, plans/, project-template/). This is intentional but could be abused.
 
-6. **Manual Steps**: Many critical rules (running tests, checking for secrets, code review quality) have no enforcement and rely entirely on human diligence.
+6. **Manual Steps**: Some critical rules (test-first TDD, comprehensive code review, secret blocking) have no enforcement and rely entirely on human diligence. Tests and clippy are now enforced at task/agent completion boundaries, but not before commits.
 
 ### Honest Assessment
 
@@ -546,20 +626,28 @@ These rules are **documented in CLAUDE.md but not enforced by hooks**:
 - Agent visibility enforcement is 100% effective
 - Hook protection prevents accidental overwrites
 - Advisory hooks provide useful reminders without being annoying
+- **NEW:** Task and agent quality gates (tests + clippy) before completion/idle
+- **NEW:** Secret detection warnings on code changes
 
-**What's weak:**
-- TDD enforcement (no test-first verification)
-- Security checks (no secret scanning, no path sanitization checks)
-- Code quality (clippy/fmt must be run manually)
+**What's improved (from Phase 1 enforcement):**
+- Code quality now enforced at task boundaries (was manual)
+- Agents can't go idle with failing tests (was no check)
+- Secret detection provides early warnings (was no scanning)
+- Workflow reminders provide just-in-time context (was documentation only)
+
+**What's still weak:**
+- TDD enforcement (no test-first verification, only test-pass at completion)
+- Security checks (secrets detected but not blocked, no path sanitization checks)
 - Data workflow (Linear as source of truth is convention only)
 - Most architecture rules are documentation only
+- Test quality (tests must pass, but no coverage requirements)
 
 **What's missing:**
-- Pre-commit test running
-- Automatic secret detection
+- Pre-commit test running (only enforced at task completion now)
+- Automatic secret blocking (only warnings, not hard denials)
 - Code coverage requirements
-- Dependency vulnerability scanning (unless using Claude-Flow security features)
+- Dependency vulnerability scanning (relying on Claude-Flow security features)
 
 **Philosophy:**
 
-This system prioritizes **critical safety rails** (no direct main commits, no invisible agents, review gate) while trusting engineers for **quality and conventions** (TDD, clean code, proper testing). The 17% hard enforcement focuses on preventing workflow breakage and protecting shared state. The 71% documentation-only rules require discipline and code review to maintain.
+This system prioritizes **critical safety rails** (no direct main commits, no invisible agents, review gate, quality at completion) while trusting engineers for **conventions and best practices** (TDD, clean code, comprehensive testing). The 23% hard enforcement (up from 17%) focuses on preventing workflow breakage, protecting shared state, and ensuring basic quality gates. The 60% documentation-only rules (down from 71%) require discipline and code review to maintain, but core quality checks now happen automatically at task boundaries.
