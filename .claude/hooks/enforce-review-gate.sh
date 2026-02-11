@@ -72,6 +72,9 @@ extract_merge_branch() {
   # Remove everything before and including 'git merge'
   local args="${cmd#*git merge }"
 
+  # Strip -m/-message with their quoted values as a unit, then strip remaining quoted strings
+  args=$(echo "$args" | sed -E "s/(-m|--message)[[:space:]]+'[^']*'//g; s/(-m|--message)[[:space:]]+\"[^\"]*\"//g; s/'[^']*'//g; s/\"[^\"]*\"//g")
+
   # Use awk to parse arguments and extract branch name
   # This handles flags and their values properly
   echo "$args" | awk '
