@@ -38,6 +38,7 @@ pub enum ViewMode {
 enum ConfirmAction {
     ApproveAllFile { file_idx: usize },
     ApproveAll,
+    MergeBranch { branch: String },
 }
 
 /// Application state for the TUI.
@@ -170,13 +171,35 @@ impl App {
         // Handle confirmation dialog first
         if let Some(action) = self.confirm_action.take() {
             match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') => match action {
+                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => match action {
                     ConfirmAction::ApproveAllFile { file_idx } => {
                         self.selected_file = file_idx;
                         self.approve_current_file()?;
                     }
                     ConfirmAction::ApproveAll => {
                         self.approve_all()?;
+                    }
+                    ConfirmAction::MergeBranch { branch } => {
+                        // Attempt the merge
+                        match git::merge_branch(&git::MergeOptions {
+                            branch: branch.clone(),
+                            delete_after: false,
+                        }) {
+                            Ok(()) => {
+                                self.status_message = Some((
+                                    format!("Merged {} successfully", branch),
+                                    Instant::now(),
+                                ));
+                                // Refresh dashboard to reflect the merge
+                                self.try_refresh_dashboard();
+                            }
+                            Err(e) => {
+                                self.status_message = Some((
+                                    format!("Merge failed: {}", e),
+                                    Instant::now(),
+                                ));
+                            }
+                        }
                     }
                 },
                 _ => {} // Any other key cancels
@@ -232,9 +255,7 @@ impl App {
                 }
             }
             KeyCode::Char('M') => {
-                // Placeholder for merge (Step 4.1 will implement)
-                self.status_message =
-                    Some(("Merge not yet implemented".to_string(), Instant::now()));
+                self.handle_merge_request();
             }
             KeyCode::Char('r') => {
                 self.try_refresh_dashboard();
@@ -485,6 +506,66 @@ impl App {
             self.files[*file_idx].hunks[*hunk_idx].status = HunkStatus::Reviewed;
         }
         Ok(())
+    }
+
+    /// Handle merge request from dashboard.
+    fn handle_merge_request(&mut self) {
+        // Get the selected branch
+        let branch = match &self.dashboard {
+            Some(dashboard) => match dashboard.selected_branch() {
+                Some(branch) => branch.to_string(),
+                None => {
+                    self.status_message = Some(("No branch selected".to_string(), Instant::now()));
+                    return;
+                }
+            },
+            None => return,
+        };
+
+        // Check worktree status
+        match git::check_worktree_status() {
+            Ok(git::WorktreeStatus::Dirty { .. }) => {
+                self.status_message = Some((
+                    "Cannot merge: working tree has uncommitted changes".to_string(),
+                    Instant::now(),
+                ));
+                return;
+            }
+            Err(e) => {
+                self.status_message = Some((
+                    format!("Failed to check worktree status: {}", e),
+                    Instant::now(),
+                ));
+                return;
+            }
+            Ok(git::WorktreeStatus::Clean) => {}
+        }
+
+        // Check review progress
+        let progress = match &self.dashboard {
+            Some(dashboard) => match dashboard.selected_item() {
+                Some(item) => item.progress.as_ref(),
+                None => None,
+            },
+            None => None,
+        };
+
+        if let Some(progress) = progress
+            && progress.total > 0
+            && progress.reviewed < progress.total
+        {
+            self.status_message = Some((
+                format!(
+                    "Cannot merge: review not complete ({}/{} hunks reviewed)",
+                    progress.reviewed, progress.total
+                ),
+                Instant::now(),
+            ));
+            return;
+        }
+
+        // All checks passed, show confirmation dialog
+        self.confirm_action = Some(ConfirmAction::MergeBranch { branch });
     }
 
     /// Attempt to refresh the dashboard from git state.
@@ -979,6 +1060,12 @@ impl App {
                 format!(
                     "Approve {} unreviewed hunks in all files?\n\n(y)es / (n)o",
                     count
+                )
+            }
+            Some(ConfirmAction::MergeBranch { branch }) => {
+                format!(
+                    "Merge branch '{}' into {}? (y/n)",
+                    branch, self.base_ref
                 )
             }
             None => return,
