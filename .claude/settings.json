@@ -180,6 +180,12 @@
             "command": "[ -n \"$SESSION_ID\" ] && npx @claude-flow/cli@latest hooks session-restore --session-id \"$SESSION_ID\" 2>/dev/null || true",
             "timeout": 10000,
             "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-checkpoint-resume.sh",
+            "timeout": 3000,
+            "continueOnError": true
           }
         ]
       }
@@ -202,6 +208,12 @@
             "type": "command",
             "command": ".claude/hooks/check-claude-flow-memory.sh",
             "timeout": 3000,
+            "continueOnError": true
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-checkpoint.sh",
+            "timeout": 5000,
             "continueOnError": true
           }
         ]
@@ -226,6 +238,12 @@
             "type": "command",
             "command": ".claude/hooks/enforce-task-quality.sh",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-checkpoint.sh",
+            "timeout": 5000,
+            "continueOnError": true
           }
         ]
       }
@@ -237,6 +255,12 @@
             "type": "command",
             "command": ".claude/hooks/enforce-idle-quality.sh",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-checkpoint.sh",
+            "timeout": 5000,
+            "continueOnError": true
           }
         ]
       }
