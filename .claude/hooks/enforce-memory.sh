@@ -25,10 +25,7 @@ if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
 
   # No claude-mem usage found - inject reminder (but don't block)
   echo "{
-  \"hookSpecificOutput\": {
-    \"hookEventName\": \"Stop\",
-    \"additionalContext\": \"💡 Reminder: Consider using claude-mem to save important insights, decisions, or patterns from this session for future reference. Run 'mem-search' to find related context or 'mem-save' to persist learnings.\"
-  }
+  \"stopReason\": \"💡 Reminder: Consider using claude-mem to save important insights, decisions, or patterns from this session for future reference.\"
 }" >&1
   exit 0
 fi
