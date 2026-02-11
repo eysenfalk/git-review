@@ -65,6 +65,50 @@ resolve_pr_branch() {
   git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""
 }
 
+# Helper: extract branch name from git merge command, skipping flags
+extract_merge_branch() {
+  local cmd="$1"
+
+  # Remove everything before and including 'git merge'
+  local args="${cmd#*git merge }"
+
+  # Strip -m/-message with their quoted values as a unit, then strip remaining quoted strings
+  args=$(echo "$args" | sed -E "s/(-m|--message)[[:space:]]+'[^']*'//g; s/(-m|--message)[[:space:]]+\"[^\"]*\"//g; s/'[^']*'//g; s/\"[^\"]*\"//g")
+
+  # Use awk to parse arguments and extract branch name
+  # This handles flags and their values properly
+  echo "$args" | awk '
+  {
+    skip_next = 0
+    branch = ""
+    for (i = 1; i <= NF; i++) {
+      arg = $i
+
+      # Skip if previous arg was a flag that takes a value
+      if (skip_next) {
+        skip_next = 0
+        continue
+      }
+
+      # Check if this is a flag that takes a value
+      if (arg == "-m" || arg == "--message" || arg == "-s" || arg == "--strategy") {
+        skip_next = 1
+        continue
+      }
+
+      # Skip any other flag (starts with -)
+      if (substr(arg, 1, 1) == "-") {
+        continue
+      }
+
+      # This is the branch name
+      branch = arg
+      break
+    }
+    print branch
+  }'
+}
+
 # Check: gh pr create, gh pr merge
 if [[ "$FIRST_LINE" =~ gh[[:space:]]+pr[[:space:]]+(create|merge) ]]; then
   BRANCH=$(resolve_pr_branch "$FIRST_LINE")
@@ -85,7 +129,7 @@ fi
 if [[ "$FIRST_LINE" =~ git[[:space:]]+merge ]]; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
   if [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
-    MERGE_BRANCH=$(echo "$FIRST_LINE" | grep -oP 'git\s+merge\s+\K\S+' || echo "")
+    MERGE_BRANCH=$(extract_merge_branch "$FIRST_LINE")
     if [[ -n "$MERGE_BRANCH" ]] && is_review_green "$MERGE_BRANCH"; then
       exit 0
     fi
