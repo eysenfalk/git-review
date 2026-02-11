@@ -16,7 +16,7 @@ use std::io;
 use std::time::{Duration, Instant};
 
 use crate::dashboard::Dashboard;
-use crate::{DiffFile, HunkStatus, state::ReviewDb};
+use crate::{git, parser, DiffFile, HunkStatus, state::ReviewDb};
 
 /// Filter mode for displaying hunks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,9 +218,18 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                // Placeholder for drill-in (Step 3.1 will implement)
-                self.status_message =
-                    Some(("Drill-in not yet implemented".to_string(), Instant::now()));
+                // Get selected branch and enter hunk review
+                if let Some(ref dashboard) = self.dashboard
+                    && let Some(branch) = dashboard.selected_branch()
+                {
+                    let branch = branch.to_string();
+                    if let Err(e) = self.enter_hunk_review(&branch) {
+                        self.status_message = Some((
+                            format!("Failed to enter review: {}", e),
+                            Instant::now(),
+                        ));
+                    }
+                }
             }
             KeyCode::Char('M') => {
                 // Placeholder for merge (Step 4.1 will implement)
@@ -239,8 +248,23 @@ impl App {
     /// Handle keyboard input in hunk review mode.
     fn handle_hunk_review_input(&mut self, key: event::KeyEvent) -> Result<()> {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => {
+            KeyCode::Char('q') => {
                 self.should_quit = true;
+            }
+            KeyCode::Esc | KeyCode::Backspace => {
+                // Check if we entered from dashboard (branch name is set in ViewMode)
+                let from_dashboard = matches!(
+                    &self.view_mode,
+                    ViewMode::HunkReview { branch, .. } if !branch.is_empty()
+                );
+
+                if from_dashboard {
+                    // Return to dashboard
+                    self.return_to_dashboard();
+                } else {
+                    // Entered directly via CLI, quit
+                    self.should_quit = true;
+                }
             }
             KeyCode::Char('?') => {
                 self.show_help = true;
@@ -476,6 +500,101 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Enter hunk review mode for a specific branch.
+    fn enter_hunk_review(&mut self, branch: &str) -> Result<()> {
+        // Get base branch from dashboard
+        let base = self
+            .dashboard
+            .as_ref()
+            .context("No dashboard available")?
+            .base_branch
+            .clone();
+
+        // Compute diff range
+        let range = format!("{}..{}", base, branch);
+
+        // Get diff from git
+        let diff_output = git::get_diff(&range).context("Failed to get git diff")?;
+
+        // Parse diff into files
+        let mut files = parser::parse_diff(&diff_output);
+
+        // Sync with database
+        self.db
+            .sync_with_diff(&range, &files)
+            .context("Failed to sync with database")?;
+
+        // Load review status for each hunk from database
+        for file in &mut files {
+            let file_path = file.path.to_string_lossy();
+            for hunk in &mut file.hunks {
+                if let Ok(status) = self.db.get_status(&range, &file_path, &hunk.content_hash) {
+                    hunk.status = status;
+                }
+            }
+        }
+
+        // Update app state
+        self.files = files;
+        self.base_ref = range.clone();
+        self.selected_file = 0;
+        self.selected_hunk = 0;
+        self.scroll_offset = 0;
+        self.filter = FilterMode::All;
+
+        // Set view mode (store branch name and base for later return to dashboard)
+        self.view_mode = ViewMode::HunkReview {
+            branch: branch.to_string(),
+            base_ref: base,
+        };
+
+        // Free dashboard memory
+        self.dashboard = None;
+
+        Ok(())
+    }
+
+    /// Return to dashboard from hunk review mode.
+    fn return_to_dashboard(&mut self) {
+        // Extract base branch from view mode
+        let base = match &self.view_mode {
+            ViewMode::HunkReview { base_ref, .. } => base_ref.clone(),
+            _ => return,
+        };
+
+        // Switch to dashboard mode first
+        self.view_mode = ViewMode::Dashboard;
+
+        // Reload dashboard from scratch
+        match Dashboard::load(&self.db, &base) {
+            Ok(mut dashboard) => {
+                // Load detail for currently selected item
+                let _ = dashboard.load_detail_for_selected(&self.db);
+                self.dashboard = Some(dashboard);
+                self.base_ref = base;
+            }
+            Err(e) => {
+                // If reload fails, show error and revert to hunk review
+                self.status_message = Some((
+                    format!("Failed to load dashboard: {}", e),
+                    Instant::now(),
+                ));
+                // Revert view mode
+                self.view_mode = ViewMode::HunkReview {
+                    branch: String::new(),
+                    base_ref: base,
+                };
+                return;
+            }
+        }
+
+        // Free hunk review memory
+        self.files = vec![];
+        self.selected_file = 0;
+        self.selected_hunk = 0;
+        self.scroll_offset = 0;
     }
 
     /// Render the UI, dispatching to the appropriate mode renderer.
