@@ -1,5 +1,7 @@
 pub mod cli;
+pub mod dashboard;
 pub mod gate;
+pub mod git;
 pub mod highlight;
 pub mod parser;
 pub mod state;

@@ -12,15 +12,36 @@ fi
 # Read JSON input from stdin
 INPUT=$(cat)
 
-# If running as a subagent, allow — agents ARE the delegation
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH_CHECK=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+
+# --- Team agent detection ---
+# If active teams exist and this session is NOT the leader of any, it's a team agent — allow.
+# Team configs store leadSessionId (the orchestrator). Any other session is a spawned agent.
+if [[ -n "$SESSION_ID" ]]; then
+  HAS_TEAMS=false
+  IS_LEADER=false
+  for config in "$HOME"/.claude/teams/*/config.json; do
+    [[ -f "$config" ]] || continue
+    HAS_TEAMS=true
+    LEAD_SESSION=$(jq -r '.leadSessionId // empty' "$config" 2>/dev/null)
+    if [[ "$SESSION_ID" == "$LEAD_SESSION" ]]; then
+      IS_LEADER=true
+      break
+    fi
+  done
+  # If teams exist and we're not the leader, we're a team agent
+  if [[ "$HAS_TEAMS" == "true" ]] && [[ "$IS_LEADER" == "false" ]]; then
+    exit 0
+  fi
+fi
+
+# --- Subagent detection (Task tool, non-team) ---
 if [[ "$TRANSCRIPT_PATH_CHECK" =~ /subagents/ ]]; then
   exit 0
 fi
 
 # If running in a worktree (.trees/), allow — worktree agents are delegated
-# Team agents spawned via TeamCreate use worktrees, which creates a different
-# project path that doesn't contain /subagents/
 if [[ "$TRANSCRIPT_PATH_CHECK" =~ \.trees[/-] ]] || [[ "$TRANSCRIPT_PATH_CHECK" =~ -\.trees- ]]; then
   exit 0
 fi
