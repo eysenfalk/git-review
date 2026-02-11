@@ -1,6 +1,7 @@
 #!/bin/bash
-# Hook: Block direct commits/pushes to main
+# Hook: Block direct modifications to main/master
 # Matcher: ^Bash$
+# Catches: push, commit, merge, update-ref, reset, rebase on main
 
 set -euo pipefail
 
@@ -19,34 +20,48 @@ fi
 FIRST_LINE=$(echo "$COMMAND" | head -1)
 
 # Get current branch
-CURRENT_BRANCH=$(git -C "${PWD}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
-# Check for git push to main/master
+deny() {
+  echo "{
+  \"hookSpecificOutput\": {
+    \"hookEventName\": \"PreToolUse\",
+    \"permissionDecision\": \"deny\",
+    \"permissionDecisionReason\": \"$1\"
+  }
+}"
+  exit 0
+}
+
+# 1. Block git push with explicit main/master target
 if [[ "$FIRST_LINE" =~ git[[:space:]]+push ]] && [[ "$FIRST_LINE" =~ (main|master) ]]; then
-  echo "{
-  \"hookSpecificOutput\": {
-    \"hookEventName\": \"PreToolUse\",
-    \"permissionDecision\": \"deny\",
-    \"permissionDecisionReason\": \"Direct pushes to main/master are not allowed. Create a feature branch and open a PR instead.\"
-  }
-}"
-  exit 0
+  deny "Direct pushes to main/master are not allowed. Create a feature branch and open a PR instead."
 fi
 
-# Check for git commit on main/master branch
+# 2. Block git push when ON main (even without explicit branch name)
+if [[ "$FIRST_LINE" =~ git[[:space:]]+push ]] && [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
+  deny "Cannot push while on $CURRENT_BRANCH. Create a feature branch and open a PR instead."
+fi
+
+# 3. Block git commit on main/master branch
 if [[ "$FIRST_LINE" =~ git[[:space:]]+commit ]] && [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
-  echo "{
-  \"hookSpecificOutput\": {
-    \"hookEventName\": \"PreToolUse\",
-    \"permissionDecision\": \"deny\",
-    \"permissionDecisionReason\": \"Cannot commit directly to $CURRENT_BRANCH. Create a feature branch first: git checkout -b feature/your-feature-name\"
-  }
-}"
-  exit 0
+  deny "Cannot commit directly to $CURRENT_BRANCH. Create a feature branch first."
 fi
 
-# Allow git checkout/switch to main (read-only operations)
-# This is OK - we only block commits/pushes
+# 4. Block git update-ref targeting main/master refs
+if [[ "$FIRST_LINE" =~ git[[:space:]]+update-ref ]] && [[ "$FIRST_LINE" =~ refs/heads/(main|master) ]]; then
+  deny "Cannot modify main/master ref directly via update-ref. Use a feature branch and PR instead."
+fi
 
-# Allow operation
+# 5. Block git reset on main/master branch
+if [[ "$FIRST_LINE" =~ git[[:space:]]+reset ]] && [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
+  deny "Cannot reset $CURRENT_BRANCH. Create a feature branch for changes."
+fi
+
+# 6. Block git rebase on main/master branch (advancing main via rebase)
+if [[ "$FIRST_LINE" =~ git[[:space:]]+rebase ]] && [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
+  deny "Cannot rebase while on $CURRENT_BRANCH. Use a feature branch and PR instead."
+fi
+
+# Allow read-only operations: checkout, switch, log, diff, status, pull
 exit 0

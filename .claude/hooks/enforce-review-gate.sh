@@ -100,5 +100,32 @@ if [[ "$FIRST_LINE" =~ git[[:space:]]+merge ]]; then
   fi
 fi
 
+# Check: git update-ref targeting main/master (plumbing bypass)
+if [[ "$FIRST_LINE" =~ git[[:space:]]+update-ref ]] && [[ "$FIRST_LINE" =~ refs/heads/(main|master) ]]; then
+  echo "{
+  \"hookSpecificOutput\": {
+    \"hookEventName\": \"PreToolUse\",
+    \"permissionDecision\": \"deny\",
+    \"permissionDecisionReason\": \"Cannot advance main via update-ref. This bypasses the review gate. Use git merge after git-review approval.\"
+  }
+}"
+  exit 0
+fi
+
+# Check: git reset on main (another bypass vector)
+if [[ "$FIRST_LINE" =~ git[[:space:]]+reset ]]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  if [[ "$CURRENT_BRANCH" =~ ^(main|master)$ ]]; then
+    echo "{
+  \"hookSpecificOutput\": {
+    \"hookEventName\": \"PreToolUse\",
+    \"permissionDecision\": \"deny\",
+    \"permissionDecisionReason\": \"Cannot reset main. This bypasses the review gate. Use a feature branch and PR workflow.\"
+  }
+}"
+    exit 0
+  fi
+fi
+
 # Allow operation
 exit 0
