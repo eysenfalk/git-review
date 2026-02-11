@@ -18,6 +18,13 @@ if [[ "$TRANSCRIPT_PATH_CHECK" =~ /subagents/ ]]; then
   exit 0
 fi
 
+# If running in a worktree (.trees/), allow — worktree agents are delegated
+# Team agents spawned via TeamCreate use worktrees, which creates a different
+# project path that doesn't contain /subagents/
+if [[ "$TRANSCRIPT_PATH_CHECK" =~ \.trees[/-] ]] || [[ "$TRANSCRIPT_PATH_CHECK" =~ -\.trees- ]]; then
+  exit 0
+fi
+
 # Get tool name
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
@@ -32,8 +39,8 @@ if [[ "$TOOL_NAME" =~ ^(Write|Edit|MultiEdit)$ ]]; then
 
   # Check if this is a source/test/config file (handles both relative and absolute paths)
   if [[ "$FILE_PATH" =~ (^|/)(src|tests)/ ]] || [[ "$FILE_PATH" =~ (^|/)Cargo\.toml$ ]]; then
-    # Whitelist: .claude/, plans/, docs/, README.md, project-template/
-    if [[ "$FILE_PATH" =~ (\.claude/|plans/|docs/|README\.md|project-template/) ]]; then
+    # Whitelist: .claude/, plans/, docs/, README.md, project-template/, .trees/ (worktree agents)
+    if [[ "$FILE_PATH" =~ (\.claude/|plans/|docs/|README\.md|project-template/|\.trees/) ]]; then
       exit 0
     fi
 
@@ -74,6 +81,11 @@ fi
 # Handle Bash tool (check for sed/awk/perl editing source files)
 if [[ "$TOOL_NAME" == "Bash" ]]; then
   COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+  # If targeting worktree files, allow — worktree agents are delegated
+  if [[ "$COMMAND" =~ \.trees/ ]]; then
+    exit 0
+  fi
 
   # Check for sed/awk/perl editing src/tests/Cargo.toml
   if [[ "$COMMAND" =~ (sed|awk|perl).*(src/|tests/|Cargo\.toml) ]]; then
