@@ -200,6 +200,7 @@ Hooks run in this exact order to ensure enforcement before learning:
 - **Agent specs** (`.claude/agents/*.md`) define the authoritative model for each agent type
 - **Claude-Flow routing** provides suggestions based on task complexity and past performance
 - **In case of conflict:** Agent spec always wins (manual configuration > automated suggestion)
+- **Model tiers:** Opus (3: planner, red-teamer, senior-coder), Sonnet (6: requirements-interviewer, explorer, architect, coder, reviewer, qa), Haiku (3: documentation, explainer, optimizer)
 - **Example:** `coder` uses Sonnet (per spec), even if Claude-Flow suggests Opus for a task
 
 ### Background Workers (Always Enabled)
@@ -364,18 +365,18 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 
 ### Agent Pipeline (ordered workflow)
 
-1. `requirements-interviewer` — Gather and clarify requirements from the user
-2. `explorer` — Research libraries, APIs, prior art, technical approaches
-3. `architect` — Design module boundaries, data flow, type definitions
+1. `requirements-interviewer` (Sonnet) — Gather and clarify requirements from the user
+2. `explorer` (Sonnet) — Research libraries, APIs, prior art, technical approaches
+3. `architect` (Sonnet) — Design module boundaries, data flow, type definitions
 4. `planner` (Opus) — Write step-by-step implementation plan (ONLY agent that writes local plan files)
 5. `red-teamer` (Opus) — Critique the plan, find bugs/edge cases/risks before implementation
 6. `coder` (Sonnet) — Standard implementation with TDD
 7. `senior-coder` (Opus) — Complex/cross-cutting/performance-critical implementation
-8. `reviewer` (Opus) — Code review after implementation (reads code, checks quality)
+8. `reviewer` (Sonnet) — Code review after implementation (reads code, checks quality)
 9. `qa` (Sonnet) — QA testing after implementation (runs things, verifies behavior, tests hooks/workflows)
-10. `documentation` — Update README, doc comments, guides
-11. `explainer` — Explain code at different expertise levels (junior → staff/architect)
-12. `optimizer` — Meta-workflow audit (run after every major task completion)
+10. `documentation` (Haiku) — Update README, doc comments, guides
+11. `explainer` (Haiku) — Explain code at different expertise levels (junior → staff/architect)
+12. `optimizer` (Haiku) — Meta-workflow audit (run after every major task completion)
 
 ### When to Use senior-coder vs coder
 
