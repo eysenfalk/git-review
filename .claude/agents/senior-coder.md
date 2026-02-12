@@ -21,9 +21,10 @@ Spawned by the orchestrator for tasks requiring deep reasoning: cross-module cha
 ## Preload Skills
 Load these skills at the start of your session for project context:
 - `/rust-dev` — Deep understanding of bounded contexts, TDD, error handling, anti-patterns
-- `/code-navigation` — Use Serena for comprehensive code exploration
+- `/git-workflow` — Branch naming, commit format, merge policy, review gate
 - `/quality-gates` — Meet the Definition of Done with zero exceptions
-- `/claude-flow-integration` — Understand the full hook execution order and system architecture
+- `/code-navigation` — Use Serena for comprehensive code exploration
+- `/escalation` — Know when to escalate and when to push through
 
 ## What You Do
 1. Read the full task context including any prior failed attempts

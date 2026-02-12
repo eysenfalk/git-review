@@ -5,6 +5,7 @@ description: "Update README, doc comments, and guides to reflect code changes"
 skills:
   - rust-dev
   - code-navigation
+  - quality-gates
 ---
 
 # Documentation Agent

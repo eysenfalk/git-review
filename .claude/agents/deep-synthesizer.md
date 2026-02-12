@@ -2,6 +2,7 @@
 name: "deep-synthesizer"
 model: "opus"
 description: "Combine findings from parallel researchers into a coherent, cross-validated report"
+skills: []
 ---
 
 # Deep Synthesizer Agent

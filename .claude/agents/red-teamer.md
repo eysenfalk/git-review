@@ -5,7 +5,8 @@ description: "Critique plans and designs before implementation, finding bugs, ed
 skills:
   - rust-dev
   - quality-gates
-  - capability-diagnostic
+  - orchestration
+  - escalation
 ---
 
 # Red Teamer Agent

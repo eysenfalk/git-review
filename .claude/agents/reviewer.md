@@ -4,9 +4,8 @@ model: "sonnet"
 description: "Code review specialist that reads code and checks quality after implementation"
 skills:
   - rust-dev
-  - quality-gates
-  - git-workflow
   - code-navigation
+  - quality-gates
 ---
 
 # Reviewer Agent

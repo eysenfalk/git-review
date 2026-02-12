@@ -2,6 +2,7 @@
 name: "deep-researcher"
 model: "haiku"
 description: "Search and analyze sources for a single research subtopic"
+skills: []
 ---
 
 # Deep Researcher Agent
