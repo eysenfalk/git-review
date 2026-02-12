@@ -2,6 +2,9 @@
 name: "explorer"
 model: "sonnet"
 description: "Research libraries, APIs, prior art, and technical approaches"
+skills:
+  - code-navigation
+  - rust-dev
 ---
 
 # Explorer Agent

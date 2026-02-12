@@ -2,6 +2,9 @@
 name: "requirements-interviewer"
 model: "sonnet"
 description: "Gather and clarify requirements from the user via structured interview"
+skills:
+  - memory-workflow
+  - rust-dev
 ---
 
 # Requirements Interviewer Agent

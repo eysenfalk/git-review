@@ -2,6 +2,10 @@
 name: "architect"
 model: "sonnet"
 description: "Design module boundaries, data flow, type definitions, and integration strategies"
+skills:
+  - rust-dev
+  - code-navigation
+  - orchestration
 ---
 
 # Architect Agent
