@@ -6,6 +6,7 @@ skills:
   - orchestration
   - context-budget
   - agent-routing
+  - escalation
 ---
 
 # Optimizer Agent
