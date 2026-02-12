@@ -1,3 +1,13 @@
+---
+name: "deep-synthesizer"
+model: "opus"
+description: "Combine findings from parallel researchers into a coherent, cross-validated report"
+skills:
+  - synthesis
+  - source-deduplication
+  - cross-validation
+---
+
 # Deep Synthesizer Agent
 
 ## Role
