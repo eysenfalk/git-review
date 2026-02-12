@@ -4,10 +4,6 @@
 
 set -euo pipefail
 
-# DISABLED: Review gate temporarily disabled until dashboard has proper merge safety UX
-# Tracked by ENG-43. Re-enable once stale hunk detection and merge safety indicators are built.
-exit 0
-
 # Read JSON input from stdin
 INPUT=$(cat)
 
