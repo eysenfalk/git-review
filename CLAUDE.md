@@ -15,7 +15,10 @@ Linear ticket: ENG-2.
 
 ## Resource Constraints
 
-- NEVER spawn more than 3 concurrent agents. Previous sessions repeatedly crashed with OOM errors from excessive agent spawning.
+- **12GB RAM available.** Each teammate (new Claude Code session in tmux) costs ~4GB. Subagents (same session) cost minimal RAM.
+- Teammate limit: **3 concurrent teammates** + orchestrator (12GB / 4GB)
+- Subagent limit: **5 concurrent subagents** (shared session, much lighter)
+- **Prefer subagents** for parallelism — 5 subagents > 3 teammates for the same RAM
 - When resuming after a crash, always check for stale teams/worktrees before spawning new agents.
 - If a session feels sluggish or memory-constrained, reduce agent count before it becomes an OOM.
 
@@ -385,7 +388,11 @@ Teams exist so agents can message each other directly. If agents only report to 
 - Each agent gets its own context window; they do NOT inherit conversation history
 - Provide full task context in the spawn prompt
 - Avoid assigning multiple agents to the same file to prevent conflicts
-- Max 3 concurrent agents (including orchestrator) — previous sessions crashed with OOM
+- **RAM constraints (12GB available):**
+  - Teammates: each spawns a NEW Claude Code session (~4GB RAM each) → max **3 teammates** + orchestrator
+  - Subagents: share orchestrator's session (minimal RAM) → max **5 subagents** concurrently
+  - This is why subagents are the default — you get more parallelism for the same RAM
+  - Previous sessions crashed with OOM from excessive teammate spawning
 
 ### Enforcement Hooks Awareness
 
