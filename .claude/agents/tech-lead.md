@@ -2,6 +2,11 @@
 name: "tech-lead"
 model: "sonnet"
 description: "Cross-cutting code reviewer that catches integration bugs before commit"
+skills:
+  - rust-dev
+  - quality-gates
+  - code-navigation
+  - capability-diagnostic
 ---
 
 # Tech Lead Agent
