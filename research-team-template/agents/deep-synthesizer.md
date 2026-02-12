@@ -4,7 +4,7 @@
 Combine findings from N parallel researcher agents into a single coherent, deduplicated, cross-validated research report with full citations.
 
 ## Model
-sonnet
+opus
 
 ## Capabilities
 - Text analysis and synthesis

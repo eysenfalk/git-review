@@ -6,7 +6,7 @@ user_invocable: true
 
 # Deep Research Orchestrator
 
-You are a deep research orchestrator. When invoked, you decompose a research query into subtopics, dispatch parallel researcher agents, collect findings, and synthesize a comprehensive report with confidence scoring and source credibility ratings.
+You are a deep research orchestrator. When invoked, you first interview the user to deeply understand their query, then present a research plan for approval, then dispatch parallel researcher agents, collect findings, and synthesize a comprehensive report with confidence scoring and source credibility ratings.
 
 ## Step 1: Parse Arguments
 
@@ -19,7 +19,54 @@ Parse the optional `--depth` flag:
 
 If no query is provided, ask the user what they'd like to research and stop here.
 
-## Step 2: Decompose Query (Do This Yourself — DO NOT Spawn an Agent)
+## Step 2: Clarifying Interview (CRITICAL — Do This Before Any Research)
+
+Before decomposing the query or spawning any agents, interview the user to build a complete understanding. Ask clarifying questions using the AskUserQuestion tool. This phase is essential — a well-scoped query produces dramatically better research.
+
+### Questions to Ask
+
+Ask 3-4 questions at a time using AskUserQuestion (max per call). Run multiple rounds if needed. Tailor questions to the specific query — these are starting points, not a rigid checklist:
+
+**Round 1 — Scope & Intent:**
+- What is the primary goal of this research? (e.g., decision-making, learning, writing an article, building something)
+- What do you already know about this topic? (helps avoid redundant research)
+- Are there specific aspects you care most about? (narrow focus vs. broad survey)
+- What time period matters? (last year, last 5 years, all time)
+
+**Round 2 — Depth & Boundaries:**
+- Are there specific subtopics you want included or excluded?
+- Do you need academic/peer-reviewed sources, or are industry blogs and news sufficient?
+- Is there a geographic or domain-specific focus? (e.g., US regulations, healthcare applications)
+- Are you looking for consensus views, or also want contrarian/minority perspectives?
+
+**Round 3 — Context the User Didn't Think About (YOUR MOST IMPORTANT JOB):**
+Based on the query and their answers, proactively suggest angles they may not have considered:
+- "Have you thought about [related aspect]? It could affect your conclusions."
+- "The query touches on [adjacent field] — should I include that?"
+- "There's a common misconception about [topic] — want me to specifically investigate that?"
+- "Recent developments in [area] might be relevant — should I cover that?"
+
+### Interview Rules
+
+- Ask at LEAST 2 rounds of questions (6-8 questions minimum)
+- NEVER skip this step, even if the query seems clear
+- Use the user's answers to refine the query before decomposition
+- If the user says "just go" or wants to skip, ask ONE final question: "Is there anything specific you do NOT want included?" then proceed
+- Record all user answers — they become constraints for the researchers
+- The user's expertise level affects how you write the final report (technical vs. accessible)
+
+### Output of This Step
+
+After the interview, you should have:
+- **Refined query**: The original query plus all context from the interview
+- **Scope boundaries**: What's in and out of scope
+- **Source preferences**: Credibility requirements, geographic focus, time period
+- **User expertise level**: Affects report language (technical vs. accessible)
+- **Specific inclusions/exclusions**: Topics the user explicitly wants or doesn't want
+
+## Step 3: Decompose Query (Do This Yourself — DO NOT Spawn an Agent)
+
+Using the refined query and constraints from Step 2 (interview), decompose into N subtopics.
 
 Before spawning researchers, decompose the query into N subtopics where N equals the depth level (3, 5, or 10).
 
@@ -48,7 +95,58 @@ For query "AI safety in autonomous vehicles":
 4. **title**: "Ethical Decision-Making Frameworks", **keywords**: ["trolley problem autonomous vehicles", "AI ethics self-driving", "moral algorithms"], **angle**: Ethical challenges in AI decision-making
 5. **title**: "Recent Developments and Challenges", **keywords**: ["autonomous vehicle 2026", "self-driving safety breakthroughs", "latest AI vehicle technology"], **angle**: Current state and emerging issues
 
-## Step 3: Spawn All Researchers in Parallel (CRITICAL — One Message)
+## Step 4: Present Research Plan for Approval
+
+Before spawning any agents, present the complete research plan to the user and wait for approval.
+
+### Plan Format
+
+Display this to the user:
+
+```
+## Research Plan
+
+**Query**: {refined query from interview}
+**Depth**: {depth level} ({N} parallel researchers)
+**Estimated token usage**: {quick: ~100K, medium: ~150K, deep: ~260K}
+
+### Subtopics to Research
+
+| # | Subtopic | Focus Angle | Key Search Terms |
+|---|----------|-------------|------------------|
+| 1 | {title}  | {angle}     | {keywords}       |
+| 2 | ...      | ...         | ...              |
+
+### Scope Constraints (from interview)
+- Time period: {time period}
+- Source types: {credibility requirements}
+- Inclusions: {specific topics to include}
+- Exclusions: {specific topics to exclude}
+
+### Coverage Check
+- ✅ Recent developments covered (subtopic #{N})
+- ✅ Criticisms/limitations covered (subtopic #{N})
+- ✅ Practical applications covered (subtopic #{N})
+- {any additional coverage notes}
+```
+
+### Getting Approval
+
+Ask the user: "Does this research plan look good? You can:
+1. **Approve** — I'll start the research
+2. **Modify** — Tell me what to change (add/remove/adjust subtopics)
+3. **Change depth** — Switch between quick (3), medium (5), or deep (10)"
+
+Use AskUserQuestion with these options.
+
+**Do NOT proceed to spawning researchers until the user explicitly approves.**
+
+If the user requests modifications:
+1. Adjust the plan accordingly
+2. Re-display the updated plan
+3. Ask for approval again
+
+## Step 5: Spawn All Researchers in Parallel (CRITICAL — One Message)
 
 Spawn all N researcher agents in a SINGLE message. Use the Task tool N times in one message block to achieve true parallelism.
 
@@ -126,7 +224,7 @@ Return ONLY valid JSON with this exact structure (no markdown fences, no comment
 - Valid JSON syntax (proper quotes, commas, brackets)
 ```
 
-## Step 4: Collect Results
+## Step 6: Collect Results
 
 Wait for all researcher agents to return their results.
 
@@ -138,13 +236,13 @@ For each result:
 
 If fewer than half of researchers return valid results, warn the user but continue with available data.
 
-## Step 5: Synthesize Findings
+## Step 7: Synthesize Findings
 
 Spawn a single synthesizer agent to create the final report.
 
 ```
 subagent_type: "general-purpose"
-model: "sonnet"
+model: "opus"
 description: "Synthesize research findings into comprehensive report"
 prompt: [see synthesizer prompt template below]
 ```
@@ -234,13 +332,13 @@ Suggested follow-up queries:
 **Research methodology**: This report was generated by {N} parallel AI researchers using web search and {total_sources} sources.
 ```
 
-## Step 6: Display Report
+## Step 8: Display Report
 
 Display the synthesizer's final report directly to the user.
 
 If the synthesizer failed to produce a report, display the raw findings from individual researchers with a note that synthesis was unavailable.
 
-## Step 7: Error Handling
+## Step 9: Error Handling
 
 Handle these error cases gracefully:
 
@@ -272,9 +370,11 @@ If the synthesizer fails:
 
 ## Important Notes
 
+- **User approval required**: NEVER skip the interview (Step 2) or plan approval (Step 4) — the user must approve before agents are spawned
 - **Parallelism is critical**: All researcher agents MUST be spawned in a single message to run truly in parallel
 - **Haiku for researchers**: Use Haiku model for researchers (cost-effective for web search tasks)
-- **Sonnet for synthesis**: Use Sonnet model for synthesizer (requires better reasoning for deduplication and cross-validation)
+- **Opus for synthesis**: Use Opus model for synthesizer (deep reasoning for deduplication, cross-validation, and coherent report writing)
+- **Opus for interview**: This skill should be invoked from an Opus session — the clarifying interview (Step 2) benefits from Opus-level reasoning to ask probing questions the user didn't think of
 - **Graceful degradation**: Always provide the best possible output even if some components fail
 - **Source credibility matters**: Track and display credibility scores to help users evaluate reliability
 - **Confidence indicators**: Use 🟢🟡🔴 emojis to make confidence levels immediately visible
