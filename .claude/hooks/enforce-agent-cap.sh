@@ -31,8 +31,8 @@ for config_file in "$TEAM_CONFIGS_DIR"/*/config.json; do
     continue
   fi
 
-  # Count members in this team config
-  MEMBERS_COUNT=$(jq '.members | length' "$config_file" 2>/dev/null || echo "0")
+  # Count active non-leader members in this team config
+  MEMBERS_COUNT=$(jq '[.members[] | select(.isActive == true and .agentType != "team-lead")] | length' "$config_file" 2>/dev/null || echo "0")
   ACTIVE_COUNT=$((ACTIVE_COUNT + MEMBERS_COUNT))
 done
 

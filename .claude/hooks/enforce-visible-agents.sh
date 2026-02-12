@@ -1,6 +1,8 @@
 #!/bin/bash
-# Hook: Enforce all agents are visible via TeamCreate + team_name
+# Hook: Log agent spawning mode (team vs subagent)
 # Matcher: ^Task$
+# Updated 2026-02-12: subagents allowed without team_name per new delegation framework
+# Teams required only when peer communication is needed (see CLAUDE.md)
 
 set -euo pipefail
 
@@ -21,17 +23,6 @@ if [[ -z "$SUBAGENT_TYPE" ]]; then
   exit 0
 fi
 
-# If subagent_type is present but team_name is missing, DENY
-if [[ -z "$TEAM_NAME" ]]; then
-  echo "{
-  \"hookSpecificOutput\": {
-    \"hookEventName\": \"PreToolUse\",
-    \"permissionDecision\": \"deny\",
-    \"permissionDecisionReason\": \"All agents must be visible in tmux. Use TeamCreate first, then Task with team_name parameter.\"
-  }
-}"
-  exit 0
-fi
-
-# Allow operation (agent spawn with team_name)
+# Allow both subagents (no team_name) and team agents (with team_name)
+# Per decision framework: subagents for independent tasks, teams for peer communication
 exit 0

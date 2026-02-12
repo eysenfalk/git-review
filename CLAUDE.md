@@ -200,7 +200,7 @@ Hooks run in this exact order to ensure enforcement before learning:
 - **Agent specs** (`.claude/agents/*.md`) define the authoritative model for each agent type
 - **Claude-Flow routing** provides suggestions based on task complexity and past performance
 - **In case of conflict:** Agent spec always wins (manual configuration > automated suggestion)
-- **Model tiers:** Opus (3: planner, red-teamer, senior-coder), Sonnet (6: requirements-interviewer, explorer, architect, coder, reviewer, qa), Haiku (4: junior-coder, documentation, explainer, optimizer)
+- **Model tiers:** Opus (3: planner, red-teamer, senior-coder), Sonnet (7: requirements-interviewer, explorer, architect, coder, tech-lead, reviewer, qa), Haiku (4: junior-coder, documentation, explainer, optimizer)
 - **Example:** `coder` uses Sonnet (per spec), even if Claude-Flow suggests Opus for a task
 
 ### Background Workers (Always Enabled)
@@ -332,27 +332,60 @@ Agents MUST NOT create PRs or merge themselves. The user does both after their r
 - Never pass unsanitized user input to `std::process::Command`
 - Never hardcode API keys or credentials
 
-## Agent Teams
+## Agent Delegation: Teams vs Subagents
 
-Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates spawn as tmux split panes automatically (tmux is detected via `$TMUX`).
+Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Use the right tool for the job.
 
-### Spawning workflow
+### Decision Framework: When to use teams vs subagents
+
+**Use a SUBAGENT (Task tool, no team_name)** when:
+- Single agent, single task, no peer review needed
+- Agent reports results back to orchestrator and is done
+- Multiple independent tasks in parallel (multiple Task calls)
+- Quick fixes, verifications, research, exploration
+
+**Use a TEAM (TeamCreate + team_name)** when:
+- Agents need to **communicate with each other** (review, feedback, challenges)
+- **Tech-lead review cycle**: coder implements → tech-lead reviews → coder fixes → tech-lead re-approves
+- **3+ tasks with dependencies** where agents self-claim from shared task list
+- **Long-lived agents** that do multiple sequential tasks
+- **Competing hypotheses** where agents debate and challenge each other
+- User explicitly wants visible tmux panes to observe/interact
+
+**Default: subagent.** Only escalate to team when peer communication adds value.
+
+### Team Peer Communication (THE WHOLE POINT)
+
+Teams exist so agents can message each other directly. If agents only report to the lead, use subagents instead.
+
+**Required communication patterns when using teams:**
+- **Tech-lead + coder**: tech-lead reviews coder's changes via `SendMessage`, sends APPROVED or feedback. Coder fixes issues and notifies tech-lead.
+- **Parallel coders on related files**: coordinate interfaces and shared types via `SendMessage`
+- **Researcher + implementer**: researcher shares findings directly with coder, not just the lead
+
+**Anti-pattern**: spawning a team where every agent only talks to the lead. That's subagents with extra overhead.
+
+### Team Spawning Workflow
 
 1. `TeamCreate` — create a named team (creates shared task list)
 2. `Task` with `team_name` and `name` — spawn teammates into the team
-3. Teammates appear as tmux split panes and communicate via `SendMessage`
+3. Teammates communicate via `SendMessage` (peer-to-peer, not just to lead)
 4. `SendMessage` with `type: "shutdown_request"` — gracefully stop teammates
 5. `TeamDelete` — clean up team resources (only after all teammates shut down)
 
-### Rules
+### Subagent Spawning Workflow
 
-- **ALWAYS use TeamCreate + `team_name` when spawning agents** — agents MUST run as visible tmux panes, never as invisible sub-processes. No exceptions.
-- Always shut down all teammates before calling `TeamDelete`
-- Use `haiku` model for lightweight/test teammates to save tokens
-- Each teammate gets its own context window; they do NOT inherit conversation history
+1. `Task` with `subagent_type` — no team_name, no TeamCreate
+2. Agent does its work and returns results
+3. No shutdown ceremony needed
+
+### Rules (both modes)
+
+- Use `haiku` model for lightweight/test agents to save tokens
+- Each agent gets its own context window; they do NOT inherit conversation history
 - Provide full task context in the spawn prompt
-- Avoid assigning multiple teammates to the same file to prevent conflicts
-- Use `TaskCreate` / `TaskUpdate` for coordinating work across teammates
+- Avoid assigning multiple agents to the same file to prevent conflicts
+- Max 3 concurrent agents (including orchestrator) — previous sessions crashed with OOM
 
 ### Enforcement Hooks Awareness
 
@@ -373,11 +406,12 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 6. `junior-coder` (Haiku) — Scaffolding, boilerplate, mechanical refactors from fully-specified plans
 7. `coder` (Sonnet) — Standard implementation with TDD
 8. `senior-coder` (Opus) — Complex/cross-cutting/performance-critical implementation
-9. `reviewer` (Sonnet) — Code review after implementation (reads code, checks quality)
-10. `qa` (Sonnet) — QA testing after implementation (runs things, verifies behavior, tests hooks/workflows)
-11. `documentation` (Haiku) — Update README, doc comments, guides
-12. `explainer` (Haiku) — Explain code at different expertise levels (junior → staff/architect)
-13. `optimizer` (Haiku) — Meta-workflow audit (run after every major task completion)
+9. **`tech-lead` (Sonnet) — Cross-cutting review AFTER each implementation step, BEFORE commit** (see `.claude/agents/tech-lead.md`)
+10. `reviewer` (Sonnet) — Code review after implementation (reads code, checks quality)
+11. `qa` (Sonnet) — QA testing after implementation (runs things, verifies behavior, tests hooks/workflows)
+12. `documentation` (Haiku) — Update README, doc comments, guides
+13. `explainer` (Haiku) — Explain code at different expertise levels (junior → staff/architect)
+14. `optimizer` (Haiku) — Meta-workflow audit (run after every major task completion)
 
 ### When to Use junior-coder vs coder vs senior-coder
 
@@ -388,10 +422,12 @@ Agent teams are enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Teammates sp
 ### Orchestrator Rules
 
 - The orchestrator (main session) MUST NOT write implementation code directly
-- The orchestrator coordinates: creates teams, spawns agents, assigns tasks, reviews results
+- The orchestrator coordinates: spawns agents, assigns tasks, reviews results
 - ALL code changes go through junior-coder, coder, or senior-coder agents
 - The orchestrator MAY edit non-code files: CLAUDE.md, agent specs, hook scripts, plans
-- The orchestrator MUST create a team (TeamCreate) before spawning any agents — agents must be visible in tmux panes
+- **Use the decision framework**: subagent for independent tasks, team for peer communication
+- **After each implementation step**: spawn tech-lead (subagent or team member) to review before committing
+- The orchestrator commits ONLY after tech-lead approves (or for trivial/no-code changes)
 
 ## Anti-Patterns
 
