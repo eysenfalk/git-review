@@ -109,10 +109,10 @@ impl App {
     /// Create a new App for dashboard mode.
     ///
     /// Loads all branches and their review progress.
-    pub fn new_dashboard(db: ReviewDb, base_branch: String) -> Result<Self> {
+    pub fn new_dashboard(mut db: ReviewDb, base_branch: String) -> Result<Self> {
         let mut dashboard = Dashboard::load(&db, &base_branch)
             .map_err(|e| anyhow::anyhow!("Failed to load dashboard: {}", e))?;
-        dashboard.load_all_details(&db);
+        dashboard.load_all_details(&mut db);
 
         Ok(Self {
             files: vec![],
@@ -232,13 +232,13 @@ impl App {
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut dashboard) = self.dashboard {
                     dashboard.select_next();
-                    let _ = dashboard.load_detail_for_selected(&self.db);
+                    let _ = dashboard.load_detail_for_selected(&mut self.db);
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 if let Some(ref mut dashboard) = self.dashboard {
                     dashboard.select_prev();
-                    let _ = dashboard.load_detail_for_selected(&self.db);
+                    let _ = dashboard.load_detail_for_selected(&mut self.db);
                 }
             }
             KeyCode::Enter => {
@@ -574,7 +574,7 @@ impl App {
         if let Some(ref mut dashboard) = self.dashboard {
             match dashboard.refresh(&self.db) {
                 Ok(true) => {
-                    let _ = dashboard.load_detail_for_selected(&self.db);
+                    let _ = dashboard.load_detail_for_selected(&mut self.db);
                 }
                 Ok(false) => {}
                 Err(e) => {
@@ -653,7 +653,7 @@ impl App {
         match Dashboard::load(&self.db, &base) {
             Ok(mut dashboard) => {
                 // Load detail for currently selected item
-                let _ = dashboard.load_detail_for_selected(&self.db);
+                let _ = dashboard.load_detail_for_selected(&mut self.db);
                 self.dashboard = Some(dashboard);
                 self.base_ref = base;
             }
