@@ -4,9 +4,9 @@ model: "opus"
 description: "Complex cross-cutting implementation, performance-critical code, and tasks that failed at lower tiers"
 skills:
   - rust-dev
-  - code-navigation
+  - git-workflow
   - quality-gates
-  - capability-diagnostic
+  - code-navigation
   - escalation
 ---
 
@@ -21,9 +21,9 @@ Spawned by the orchestrator for tasks requiring deep reasoning: cross-module cha
 ## Preload Skills
 Load these skills at the start of your session for project context:
 - `/rust-dev` — Deep understanding of bounded contexts, TDD, error handling, anti-patterns
-- `/code-navigation` — Use Serena for comprehensive impact analysis
+- `/git-workflow` — Branch naming, commit format, merge policy, review gate
 - `/quality-gates` — Meet the Definition of Done with zero exceptions
-- `/capability-diagnostic` — Diagnose failures systematically when things go wrong
+- `/code-navigation` — Use Serena for comprehensive impact analysis
 - `/escalation` — Know when to escalate and when to push through
 
 ## What You Do
