@@ -141,6 +141,38 @@ impl Dashboard {
         Ok(())
     }
 
+    /// Load details for all items eagerly.
+    pub fn load_all_details(&mut self, db: &ReviewDb) {
+        for item in &mut self.items {
+            // If detail is already loaded, skip
+            if item.detail.is_some() {
+                continue;
+            }
+
+            // Load branch detail from git (ignore errors for individual branches)
+            let branch_name = &item.branch.name;
+            if let Ok(detail) = crate::git::get_branch_detail(&self.base_branch, branch_name) {
+                // Build diff range and get progress from database
+                let range = format!("{}..{}", self.base_branch, branch_name);
+                let progress = match db.progress(&range) {
+                    Ok(p) => ReviewProgress {
+                        reviewed: p.reviewed,
+                        total: p.total_hunks,
+                    },
+                    Err(_) => ReviewProgress {
+                        reviewed: 0,
+                        total: 0,
+                    },
+                };
+
+                // Update item with loaded data
+                item.detail = Some(detail);
+                item.progress = Some(progress);
+            }
+            // If get_branch_detail fails, we leave detail as None (shows "-" in UI)
+        }
+    }
+
     /// Check if the selected branch can be merged (all hunks reviewed).
     pub fn can_merge_selected(&self) -> bool {
         self.selected_item()

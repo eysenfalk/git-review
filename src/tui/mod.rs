@@ -110,8 +110,9 @@ impl App {
     ///
     /// Loads all branches and their review progress.
     pub fn new_dashboard(db: ReviewDb, base_branch: String) -> Result<Self> {
-        let dashboard = Dashboard::load(&db, &base_branch)
+        let mut dashboard = Dashboard::load(&db, &base_branch)
             .map_err(|e| anyhow::anyhow!("Failed to load dashboard: {}", e))?;
+        dashboard.load_all_details(&db);
 
         Ok(Self {
             files: vec![],
