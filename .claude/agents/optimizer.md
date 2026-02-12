@@ -5,8 +5,7 @@ description: "Meta-workflow auditor that identifies process improvements and ine
 skills:
   - orchestration
   - context-budget
-  - agent-routing
-  - escalation
+  - capability-diagnostic
 ---
 
 # Optimizer Agent

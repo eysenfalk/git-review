@@ -6,7 +6,8 @@ skills:
   - rust-dev
   - code-navigation
   - quality-gates
-  - claude-flow-integration
+  - capability-diagnostic
+  - escalation
 ---
 
 # Senior Coder Agent
