@@ -25,20 +25,12 @@ target
 
 /target
 
-# MCP server generated configs (local only)
+# MCP server runtime data (local only, not portable)
 .claude-flow/
-.claude/agents/
 .firecrawl/
 .serena/
-
-# Claude-Flow generated artifacts (local only)
-.claude/commands/
-.claude/skills/
-.claude/helpers/
-.claude/memory.db
 .swarm/
-
-# Session checkpoints (local only)
+.claude/memory.db
 .claude/checkpoints/*.json
 
 # Backup files
