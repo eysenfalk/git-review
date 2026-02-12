@@ -80,6 +80,9 @@ fn main() -> Result<()> {
         Some(Commands::Watch(args)) => {
             handle_watch(args.interval)?;
         }
+        Some(Commands::Dashboard) => {
+            handle_dashboard()?;
+        }
     }
 
     Ok(())

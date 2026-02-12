@@ -37,6 +37,8 @@ pub enum Commands {
     Approve(ApproveArgs),
     /// Watch branches for review status changes.
     Watch(WatchArgs),
+    /// Open the branch review dashboard.
+    Dashboard,
 }
 
 #[derive(Args, Debug)]
