@@ -31,5 +31,16 @@ target
 .firecrawl/
 .serena/
 
+# Claude-Flow generated artifacts (local only)
+.claude/commands/
+.claude/skills/
+.claude/helpers/
+.claude/memory.db
+.swarm/
+
 # Session checkpoints (local only)
 .claude/checkpoints/*.json
+
+# Backup files
+*copy.*
+*copy\ *
